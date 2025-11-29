@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inscripciones</title>
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/inscriptions.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-header">
+        <div class="header-logo-container">
+            <img src="assets/logo.png" class="header-logo">
+        </div>
+        <div class="actions">
+            <button id="back-btn" class="btn secondary-btn">Volver</button>
+            <button id="logout-btn" class="btn secondary-btn">Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <div class="inscriptions-container">
+        <div class="inscriptions-header">
+            <h2>Gestión de Inscripciones</h2>
+            <div class="header-stats">
+                <div class="stat-card">
+                    <span class="stat-number" id="total-inscriptions">0</span>
+                    <span class="stat-label">Total</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="filters-section">
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label for="dni-search">Buscar por DNI:</label>
+                    <input type="text" id="dni-search" placeholder="Ingresa DNI...">
+                </div>
+                <div class="filter-group">
+                    <label for="provincia-filter">Filtrar por Provincia:</label>
+                    <select id="provincia-filter">
+                        <option value="todas">Todas las provincias</option>
+                        <option value="buenos aires">Buenos Aires</option>
+                        <option value="caba">CABA</option>
+                        <option value="cordoba">Córdoba</option>
+                        <option value="santa fe">Santa Fe</option>
+                        <option value="tucuman">Tucumán</option>
+                        <option value="entre rios">Entre Ríos</option>
+                        <option value="neuquen">Neuquén</option>
+                        <option value="rio negro">Río Negro</option>
+                        <option value="misiones">Misiones</option>
+                        <option value="corrientes">Corrientes</option>
+                        <option value="formosa">Formosa</option>
+                        <option value="chaco">Chaco</option>
+                        <option value="catamarca">Catamarca</option>
+                        <option value="la rioja">La Rioja</option>
+                        <option value="santiago del estero">Santiago del Estero</option>
+                        <option value="salta">Salta</option>
+                        <option value="jujuy">Jujuy</option>
+                        <option value="san juan">San Juan</option>
+                        <option value="san luis">San Luis</option>
+                        <option value="la pampa">La Pampa</option>
+                        <option value="mendoza">Mendoza</option>
+                        <option value="chubut">Chubut</option>
+                        <option value="santa cruz">Santa Cruz</option>
+                        <option value="tierra del fuego">Tierra del Fuego</option>
+                        <option value="otros">Otros países/estados</option>
+                    </select>
+                </div>
+                <!-- NUEVO: Filtro por curso -->
+                <div class="filter-group">
+                    <label for="curso-filter">Filtrar por Curso:</label>
+                    <select id="curso-filter">
+                        <option value="todos">Todos los cursos</option>
+                        <!-- Los cursos se cargarán dinámicamente -->
+                    </select>
+                </div>
+            </div>
+            <div class="filters-row filters-actions">
+                <button id="clear-filters" class="btn secondary-btn">Limpiar Filtros</button>
+                <!-- NUEVO: Botón de exportar CSV -->
+                <button id="export-csv" class="btn success-btn">
+                    <span class="export-icon">📊</span>
+                    Exportar CSV
+                </button>
+            </div>
+        </div>
+
+        <div id="loading-container" style="text-align: center; padding: 50px;">
+            <div class="loading-indicator"></div>
+            <p>Cargando inscripciones...</p>
+        </div>
+
+        <div id="inscriptions-content" style="display: none;">
+            <div class="inscriptions-table-container">
+                <table id="inscriptions-table" class="inscriptions-table">
+                    <thead>
+                        <tr>
+                            <th>DNI/ID</th>
+                            <th>Nombre Completo</th>
+                            <th>Curso</th>
+                            <th>Correo</th>
+                            <th>Provincia/Estado</th>
+                            <th>Localidad</th>
+                            <th>Código Postal</th>
+                            <th>Fecha</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inscriptions-list">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination">
+            </div>
+        </div>
+
+        <div id="error-container" style="display: none; text-align: center; padding: 30px;">
+            <h3 style="color: #e74c3c;">Error al cargar las inscripciones</h3>
+            <p id="error-message" style="margin-top: 15px;"></p>
+            <button id="retry-btn" class="btn primary-btn" style="margin-top: 20px;">Reintentar</button>
+        </div>
+
+        <div id="no-inscriptions" style="display: none; text-align: center; padding: 50px;">
+            <h3>No se encontraron inscripciones</h3>
+            <p>No hay inscripciones que coincidan con los filtros aplicados.</p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-content">
+            <p>&copy; Push And Pull Now Agency</p>
+            <p class="footer-subtitle">Desarrollado para la gestión eficiente de inscripciones</p>
+        </div>
+    </footer>
+
+    <!-- Modal de confirmación para eliminar -->
+    <div id="delete-modal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <h3>¿Está seguro que desea eliminar esta inscripción?</h3>
+            <p>Esta acción no se puede deshacer.</p>
+            <div class="confirm-buttons">
+                <button id="delete-cancel" class="btn secondary-btn">Cancelar</button>
+                <button id="delete-confirm" class="btn danger-btn">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NUEVO: Modal de confirmación para exportar CSV -->
+    <div id="export-modal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <h3>Exportar Inscripciones a CSV</h3>
+            <p id="export-message">¿Desea exportar todas las inscripciones que coinciden con los filtros actuales?</p>
+            <div id="export-summary" class="export-summary">
+                <!-- Se llenará dinámicamente -->
+            </div>
+            <div class="confirm-buttons">
+                <button id="export-cancel" class="btn secondary-btn">Cancelar</button>
+                <button id="export-confirm" class="btn success-btn">
+                    <span class="export-icon">📊</span>
+                    Exportar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/inscriptions.js"></script>
+    <script src="js/ui-effects.js"></script>
+</body>
+</html>
