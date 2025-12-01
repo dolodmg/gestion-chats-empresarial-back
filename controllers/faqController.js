@@ -1,5 +1,6 @@
 const Message = require('../models/Message');
 const FAQ = require('../models/FAQ');
+const AssistantPrompt = require('../models/AssistantPrompt'); 
 const Chat = require('../models/Chat');
 
 exports.analyzeFAQs = async (req, res) => {
@@ -9,55 +10,49 @@ exports.analyzeFAQs = async (req, res) => {
     const effectiveClientId = user.role === 'admin' ? clientId : user.clientId;
     
     if (!effectiveClientId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'clientId es requerido' 
-      });
+      return res.status(400).json({ success: false, error: 'clientId es requerido' });
     }
 
     console.log(`🔍 Analizando FAQs para cliente: ${effectiveClientId}`);
 
+    let businessContext = '';
+    try {
+      const assistantData = await AssistantPrompt.findOne({ 
+        clientId: effectiveClientId, 
+        isActive: true 
+      }).select('promptText');
+      
+      if (assistantData && assistantData.promptText) {
+        businessContext = assistantData.promptText;
+        console.log('🧠 Contexto del negocio cargado exitosamente.');
+      }
+    } catch (err) {
+      console.warn('⚠️ No se pudo cargar el contexto del asistente, usando modo genérico.');
+    }
+
     const userMessages = await Message.find({
       clientId: effectiveClientId,
       sender: 'user',
-      // Filtrar mensajes con contenido válido
       content: { $exists: true, $ne: '', $ne: null, $type: 'string' }
     })
     .select('content chatId timestamp')
     .sort({ timestamp: -1 })
-    .limit(1000);
+    .limit(20000);
 
-    // Filtro adicional en JavaScript por seguridad
     const validMessages = userMessages.filter(msg => msg.content && typeof msg.content === 'string' && msg.content.trim().length > 0);
-
-    console.log(`📊 Encontrados ${validMessages.length} mensajes de usuarios`);
-    
-    if (validMessages.length > 0) {
-      console.log('📝 Ejemplos de mensajes:');
-      validMessages.slice(0, 5).forEach((msg, i) => {
-        const preview = msg.content.substring(0, 80);
-        console.log(`  ${i + 1}. "${preview}..."`);
-      });
-    }
 
     if (validMessages.length === 0) {
       return res.json({
         success: true,
         message: 'No se encontraron preguntas para analizar',
         faqs: [],
-        stats: {
-          messagesAnalyzed: 0,
-          faqsGenerated: 0
-        }
+        stats: { messagesAnalyzed: 0, faqsGenerated: 0 }
       });
     }
 
-    const groupedQuestions = await groupQuestionsByAI(validMessages, effectiveClientId);
+    const groupedQuestions = await groupQuestionsByAI(validMessages, effectiveClientId, businessContext);
     const faqsWithResponses = await enrichFAQsWithResponses(groupedQuestions, effectiveClientId);
     const savedFAQs = await saveFAQs(faqsWithResponses, effectiveClientId);
-
-    console.log(`✅ Análisis completado. ${savedFAQs.length} FAQs procesadas`);
-
     res.json({
       success: true,
       message: 'Análisis completado exitosamente',
@@ -65,17 +60,13 @@ exports.analyzeFAQs = async (req, res) => {
       stats: {
         messagesAnalyzed: validMessages.length,
         faqsGenerated: savedFAQs.length,
-        analyzedPeriod: 'Últimos 1000 mensajes'
+        analyzedPeriod: 'Últimos 2000 mensajes'
       }
     });
 
   } catch (error) {
     console.error('❌ Error analizando FAQs:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Error al analizar preguntas frecuentes',
-      details: error.message 
-    });
+    res.status(500).json({ success: false, error: 'Error al analizar preguntas frecuentes', details: error.message });
   }
 };
 
@@ -282,44 +273,56 @@ exports.getFAQStats = async (req, res) => {
   }
 };
 
-async function groupQuestionsByAI(messages, clientId) {
+async function groupQuestionsByAI(messages, clientId, businessContext) {
   try {
     const questions = messages
       .map(m => m.content)
       .filter(content => content && typeof content === 'string')
       .map(content => content.trim())
-      .filter(q => q.length > 5);
+      .filter(q => q.length > 5); 
     const cleanQuestions = questions.filter(q => {
       const lower = q.toLowerCase();
-      return !['hola', 'buen dia', 'gracias', 'chau'].includes(lower);
+      const forbidden = ['gracias', 'muchas gracias', 'ok dale', 'perfecto', 'buenisimo', 'si obvio', 'dale genial', 'hola', 'buen dia', 'info'];
+      return !forbidden.some(f => lower === f); 
     });
 
-    const sampleSize = Math.min(cleanQuestions.length, 200);
+    const sampleSize = Math.min(cleanQuestions.length, 400);
     const sampledQuestions = cleanQuestions.slice(0, sampleSize);
-    const prompt = `Eres un experto clasificador de consultas para un chatbot.
-Tu tarea es agrupar las siguientes ${sampledQuestions.length} preguntas de usuarios.
 
-REGLAS DE CATEGORIZACIÓN (USAR SOLO ESTAS 5):
-1. "Financiamiento": OBLIGATORIO si la pregunta menciona: cuotas, financiación, financiamiento, préstamo, banco, tarjeta, interés, plan de pago.
-2. "Precios": Si pregunta cuánto cuesta, valor, precio, cotización.
-3. "Soporte Técnico": Problemas, fallas, errores, no funciona, garantía, reparación.
-4. "Productos/Servicios": Stocks, modelos, características, colores, disponibilidad (que no sea precio).
-5. "Información General": Horarios, ubicación, teléfono, contacto, envíos.
+    console.log(`🤖 Enviando ${sampledQuestions.length} mensajes a IA para agrupar...`);
 
-IMPORTANTE:
-- La categoría "Pedidos" NO EXISTE.
-- La categoría "Ventas" NO EXISTE (usa Productos/Servicios o Precios).
-- Prioriza "Financiamiento" sobre cualquier otra si aparecen palabras relacionadas al dinero/pagos diferidos.
+    const prompt = `Eres un Analista de Datos experto y estricto.
+CONTEXTO DEL NEGOCIO:
+"""
+${businessContext ? businessContext.substring(0, 3000) : 'Negocio general'}
+"""
 
-INPUT:
+TU TAREA:
+Agrupar mensajes en Preguntas Frecuentes (FAQs).
+
+REGLAS DE ORO PARA EL TÍTULO (CANONICAL QUESTION):
+1. **REPRESENTATIVIDAD:** El título (canonicalQuestion) debe reflejar la intención DE LA MAYORÍA de los mensajes del grupo, no del mensaje más largo o complejo.
+   - Si 10 personas dicen "¿Cómo funcionan los préstamos?" y 1 dice "¿Qué tasa tiene?", el título DEBE SER "¿Cómo funcionan los préstamos?".
+
+REGLAS DE AGRUPACIÓN (ANTI-MEZCLA):
+1. **ALQUILER vs VENTA/FINANCIACIÓN:** SON COSAS DISTINTAS. 
+   - Si alguien pregunta por "Alquilar", "Rentar" o "Por día", NO lo agrupes con "Comprar", "Financiar" o "Préstamos". Haz un grupo aparte o ignóralo si son pocos.
+2. **INTENCIONES MIXTAS:** No agrupes "Requisitos" con "Precios". Si no estás seguro, sepáralos.
+
+REGLAS DE FUSIÓN (MERGE):
+- Si ves un grupo "¿Cómo funcionan los préstamos?" y otro "¿Info sobre préstamos?", JÚNTALOS EN UNO SOLO. Son la misma intención.
+
+CATEGORÍAS (4): "Precios/Financiamiento", "Productos/Servicios", "Soporte Técnico", "Información General".
+
+INPUT (Muestra):
 ${sampledQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 
 FORMATO JSON:
 {
   "groups": [
     {
-      "canonicalQuestion": "Pregunta clara y neutra",
-      "category": "Una de las 5 categorías permitidas",
+      "canonicalQuestion": "Pregunta representativa de la mayoría",
+      "category": "Categoría",
       "variations": ["texto original 1", "texto original 2"]
     }
   ]
@@ -328,55 +331,137 @@ FORMATO JSON:
     const grouped = await callAI(prompt);
     
     const groupsWithCounts = grouped.groups.map(group => {
-    
       const finalCategory = assignStrictCategory(group.canonicalQuestion, group.category);
 
       const variations = group.variations.map(variation => {
+        
         const count = questions.filter(q => 
-          normalizeText(q).includes(normalizeText(variation)) ||
-          normalizeText(variation).includes(normalizeText(q))
+          areTextsSimilar(q, variation) 
         ).length;
         
         return {
           question: variation,
-          count: Math.max(count, 1),
+          count: Math.max(count, 1), 
           lastSeen: new Date()
         };
       });
 
+      const totalCount = variations.reduce((sum, v) => sum + v.count, 0);
+
       return {
         ...group,
-        category: finalCategory, 
+        category: finalCategory,
         variations,
-        totalCount: variations.reduce((sum, v) => sum + v.count, 0)
+        totalCount
       };
     });
 
-    return groupsWithCounts;
+    const validGroups = groupsWithCounts.filter(g => g.totalCount >= 3);
+    const finalGroups = mergeSimilarGroups(validGroups);
+    
+    return finalGroups;
 
   } catch (error) {
     console.error('Error agrupando con IA:', error);
-    return basicGrouping(messages);
+    return [];
   }
+}
+
+function areTextsSimilar(text1, text2) {
+  const normalize = (t) => t.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim();
+
+  const t1 = normalize(text1);
+  const t2 = normalize(text2);
+
+  if (t1 === t2) return true;
+
+  const getBigrams = (text) => {
+    const words = text.split(/\s+/).filter(w => w.length > 2); 
+    const bigrams = new Set();
+    for (let i = 0; i < words.length - 1; i++) {
+      bigrams.add(`${words[i]} ${words[i+1]}`);
+    }
+    return bigrams;
+  };
+
+  const bg1 = getBigrams(t1);
+  const bg2 = getBigrams(t2);
+
+  if (bg1.size < 2 || bg2.size < 2) {
+    const words1 = new Set(t1.split(/\s+/));
+    const words2 = new Set(t2.split(/\s+/));
+    const intersection = [...words1].filter(x => words2.has(x)).length;
+    const union = new Set([...words1, ...words2]).size;
+    return (intersection / union) > 0.75; 
+  }
+
+  let intersection = 0;
+  bg1.forEach(pair => {
+    if (bg2.has(pair)) intersection++;
+  });
+
+  const union = new Set([...bg1, ...bg2]).size;
+  const similarity = intersection / union;
+
+   return similarity >= 0.4; 
+}
+
+function mergeSimilarGroups(groups) {
+  const merged = [];
+  const processedIndices = new Set();
+
+  for (let i = 0; i < groups.length; i++) {
+    if (processedIndices.has(i)) continue;
+
+    let masterGroup = { ...groups[i] };
+    processedIndices.add(i);
+
+    for (let j = i + 1; j < groups.length; j++) {
+      if (processedIndices.has(j)) continue;
+
+      const candidate = groups[j];
+
+      if (areTextsSimilar(masterGroup.canonicalQuestion, candidate.canonicalQuestion) || 
+          masterGroup.canonicalQuestion.includes(candidate.canonicalQuestion) ||
+          candidate.canonicalQuestion.includes(masterGroup.canonicalQuestion)) {
+        
+        console.log(`🔗 Fusionando grupos similares: "${masterGroup.canonicalQuestion}" + "${candidate.canonicalQuestion}"`);
+        
+        masterGroup.variations = [...masterGroup.variations, ...candidate.variations];
+        if (candidate.canonicalQuestion.length < masterGroup.canonicalQuestion.length) {
+          masterGroup.canonicalQuestion = candidate.canonicalQuestion;
+        }
+        
+        processedIndices.add(j);
+      }
+    }
+    merged.push(masterGroup);
+  }
+  return merged;
 }
 
 function assignStrictCategory(text, aiCategory) {
   const t = normalizeText(text);
-  if (t.includes('financ') || t.includes('prestamo') || t.includes('cuota') || t.includes('banco') || t.includes('credito') || t.includes('interes')) {
-    return 'Financiamiento';
+
+  if (
+    t.includes('precio') || t.includes('valor') || t.includes('cuesta') || t.includes('sale') || 
+    t.includes('financ') || t.includes('prestamo') || t.includes('cuota') || t.includes('banco') || t.includes('tarjeta') || t.includes('pago') || t.includes('interes') 
+  ) {
+    return 'Precios/Financiamiento';
   }
-  if (t.includes('precio') || t.includes('valor') || t.includes('cuesta') || t.includes('sale')) {
-    return 'Precios';
-  }
-  if (t.includes('funciona') || t.includes('roto') || t.includes('falla') || t.includes('problema') || t.includes('tecnico') || t.includes('garantia')) {
+
+  if (t.includes('funciona') || t.includes('roto') || t.includes('falla') || t.includes('problema') || t.includes('tecnico') || t.includes('garantia') || t.includes('reparar')) {
     return 'Soporte Técnico';
   }
 
-  if (aiCategory === 'Ventas' || aiCategory === 'Pedidos') {
+  if (aiCategory === 'Ventas' || aiCategory === 'Pedidos' || t.includes('stock') || t.includes('modelo') || t.includes('catalogo') || t.includes('disponible')) {
     return 'Productos/Servicios';
   }
 
-  const validCategories = ['Financiamiento', 'Precios', 'Soporte Técnico', 'Productos/Servicios', 'Información General'];
+  const validCategories = ['Precios/Financiamiento', 'Productos/Servicios', 'Soporte Técnico', 'Información General'];
   
   if (validCategories.includes(aiCategory)) {
     return aiCategory;
@@ -386,11 +471,10 @@ function assignStrictCategory(text, aiCategory) {
 }
 
 async function enrichFAQsWithResponses(groups, clientId) {
-  const enriched = [];
-
-  for (const group of groups) {
+  const promises = groups.map(async (group) => {
     try {
       const variationTexts = group.variations.map(v => v.question);
+      
       const userMessages = await Message.find({
         clientId,
         sender: 'user',
@@ -400,8 +484,10 @@ async function enrichFAQsWithResponses(groups, clientId) {
       }).limit(10);
 
       let commonResponse = null;
+      
       if (userMessages.length > 0) {
         const chatIds = [...new Set(userMessages.map(m => m.chatId))];
+        
         const botResponses = await Message.find({
           chatId: { $in: chatIds },
           sender: 'bot',
@@ -416,18 +502,18 @@ async function enrichFAQsWithResponses(groups, clientId) {
         }
       }
 
-      enriched.push({
+      return {
         ...group,
         commonResponse
-      });
+      };
 
     } catch (error) {
       console.error('Error enriqueciendo FAQ:', error);
-      enriched.push(group);
+      return group;
     }
-  }
+  });
 
-  return enriched;
+  return Promise.all(promises);
 }
 
 async function saveFAQs(faqs, clientId) {
