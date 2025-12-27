@@ -543,3 +543,132 @@ exports.checkChatStatus = async (req, res) => {
     res.status(500).json({ msg: 'Error del servidor' });
   }
 };
+
+// Buscar chat por número de teléfono
+exports.findChatByPhone = async (req, res) => {
+  try {
+    const { phoneNumber } = req.query;
+    const clientId = req.user.role === 'admin'
+      ? req.query.clientId
+      : req.user.clientId;
+
+    if (!clientId) {
+      return res.status(400).json({ msg: 'Se requiere clientId' });
+    }
+
+    if (!phoneNumber) {
+      return res.status(400).json({ msg: 'Se requiere phoneNumber' });
+    }
+
+    console.log(`Buscando chat por teléfono: ${phoneNumber}, clientId: ${clientId}`);
+
+    // Normalizar el número de teléfono (eliminar espacios, guiones, paréntesis, etc.)
+    const normalizePhone = (phone) => {
+      return phone.replace(/[\s\-\(\)\+]/g, '');
+    };
+
+    const normalizedInput = normalizePhone(phoneNumber);
+
+    // Buscar en la colección de mensajes
+    const chats = await Message.aggregate([
+      { 
+        $match: {
+          clientId: clientId,
+          chatId: { $ne: null },
+          content: { $ne: null }
+        }
+      },
+      { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
+      { 
+        $group: {
+          _id: "$chatId",
+          lastMessage: { $first: "$content" },
+          lastMessageTimestamp: { $first: "$timestamp" },
+          phoneNumber: { $first: "$phoneNumber" },
+          contactName: { 
+            $first: { 
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$contactName", null] },
+                    { $ne: ["$contactName", ""] },
+                    { $ne: ["$contactName", "Usuario Prueba"] }
+                  ]
+                },
+                "$contactName",
+                null
+              ]
+            }
+          },
+          clientId: { $first: "$clientId" }
+        }
+      },
+      { 
+        $project: {
+          _id: 0,
+          chatId: "$_id",
+          lastMessage: 1,
+          lastMessageTimestamp: 1,
+          phoneNumber: 1,
+          contactName: { $ifNull: ["$contactName", "$_id"] },
+          clientId: 1
+        }
+      }
+    ]);
+
+    // Buscar el chat que coincida con el número normalizado
+    const matchingChat = chats.find(chat => {
+      const normalizedChatPhone = normalizePhone(chat.phoneNumber);
+      return normalizedChatPhone === normalizedInput ||
+             normalizedChatPhone.includes(normalizedInput) ||
+             normalizedInput.includes(normalizedChatPhone);
+    });
+
+    if (!matchingChat) {
+      return res.status(404).json({ msg: 'Chat no encontrado' });
+    }
+
+    // Obtener el estado y tags del chat
+    const chatDoc = await Chat.findOne({ 
+      chatId: matchingChat.chatId, 
+      clientId 
+    }).select('chatId chatStatus statusChangeTime tags').lean();
+
+    // Verificar timeout de 30 minutos
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    let chatStatus = 'bot';
+    let statusChangeTime = null;
+    let tags = [];
+
+    if (chatDoc) {
+      if (chatDoc.chatStatus === 'human' && chatDoc.statusChangeTime && chatDoc.statusChangeTime < thirtyMinutesAgo) {
+        chatStatus = 'bot';
+        statusChangeTime = null;
+        // Actualizar en la base de datos
+        await Chat.updateOne(
+          { chatId: matchingChat.chatId, clientId },
+          { $set: { chatStatus: 'bot', statusChangeTime: null } }
+        );
+      } else {
+        chatStatus = chatDoc.chatStatus;
+        statusChangeTime = chatDoc.statusChangeTime;
+      }
+      tags = chatDoc.tags || [];
+    }
+
+    const enrichedChat = {
+      ...matchingChat,
+      chatStatus,
+      statusChangeTime,
+      tags,
+      unreadCount: 0
+    };
+
+    console.log('Chat encontrado por teléfono:', enrichedChat.chatId);
+    res.json(enrichedChat);
+  } catch (error) {
+    console.error('Error finding chat by phone:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};
+
