@@ -23,7 +23,7 @@ exports.getChats = async (req, res) => {
 
     // Primera parte: agregación de mensajes (igual que antes)
     const chats = await Message.aggregate([
-      { 
+      {
         $match: {
           clientId: clientId,
           chatId: { $ne: null },
@@ -31,14 +31,14 @@ exports.getChats = async (req, res) => {
         }
       },
       { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
-      { 
+      {
         $group: {
           _id: "$chatId",
           lastMessage: { $first: "$content" },
           lastMessageTimestamp: { $first: "$timestamp" },
           phoneNumber: { $first: "$phoneNumber" },
-          contactName: { 
-            $first: { 
+          contactName: {
+            $first: {
               $cond: [
                 {
                   $and: [
@@ -69,7 +69,7 @@ exports.getChats = async (req, res) => {
           }
         }
       },
-      { 
+      {
         $project: {
           _id: 0,
           chatId: "$_id",
@@ -88,10 +88,10 @@ exports.getChats = async (req, res) => {
 
     // Obtener el estado Y TAGS de cada chat desde la colección Chat
     const chatIds = chats.map(chat => chat.chatId);
-    const chatStatuses = await Chat.find({ 
-      chatId: { $in: chatIds }, 
-      clientId 
-    }).select('chatId chatStatus statusChangeTime tags').lean(); 
+    const chatStatuses = await Chat.find({
+      chatId: { $in: chatIds },
+      clientId
+    }).select('chatId chatStatus statusChangeTime tags assignedAdvisorName').lean();
 
     // Crear un mapa de estados de chat para búsqueda rápida
     const statusMap = {};
@@ -100,17 +100,19 @@ exports.getChats = async (req, res) => {
 
     chatStatuses.forEach(chat => {
       if (chat.chatStatus === 'human' && chat.statusChangeTime && chat.statusChangeTime < thirtyMinutesAgo) {
-        statusMap[chat.chatId] = { 
-          chatStatus: 'bot', 
+        statusMap[chat.chatId] = {
+          chatStatus: 'bot',
           statusChangeTime: null,
-          tags: chat.tags || []
+          tags: chat.tags || [],
+          assignedAdvisorName: chat.assignedAdvisorName || null
         };
         chatsToUpdate.push(chat.chatId);
       } else {
         statusMap[chat.chatId] = {
           chatStatus: chat.chatStatus,
           statusChangeTime: chat.statusChangeTime,
-          tags: chat.tags || [] 
+          tags: chat.tags || [],
+          assignedAdvisorName: chat.assignedAdvisorName || null
         };
       }
     });
@@ -128,11 +130,12 @@ exports.getChats = async (req, res) => {
       ...chat,
       chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
       statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
-      tags: statusMap[chat.chatId]?.tags || [] 
+      tags: statusMap[chat.chatId]?.tags || [],
+      assignedAdvisorName: statusMap[chat.chatId]?.assignedAdvisorName || null
     }));
 
     console.log('Chats encontrados:', enrichedChats.length);
-    
+
     res.json(enrichedChats);
   } catch (error) {
     console.error('Error fetching chats:', error);
@@ -270,7 +273,7 @@ exports.changeChatStatus = async (req, res) => {
       try {
         if (typeof ChatState !== 'undefined' && ChatState) {
           chatState = await ChatState.findOne({ chatId, clientId });
-          
+
           if (chatState) {
             console.log(`Chat no encontrado en colección Chat, pero encontrado en ChatState: ${chatId}`);
             // Crear el chat basado en el estado encontrado
@@ -314,7 +317,7 @@ exports.changeChatStatus = async (req, res) => {
         // Buscar o crear el registro en ChatState
         chatState = await ChatState.findOneAndUpdate(
           { chatId, clientId },
-          { 
+          {
             chatStatus: status,
             statusChangeTime: status === 'human' ? new Date() : null
           },
@@ -336,7 +339,7 @@ exports.changeChatStatus = async (req, res) => {
       status,
       chat.statusChangeTime
     );
-    
+
     res.json({
       chatId,
       chatStatus: chat.chatStatus,
@@ -382,15 +385,15 @@ exports.sendManualMessage = async (req, res) => {
 
     // Buscar datos del chat existente
     let chat = await Chat.findOne({ chatId, clientId });
-    
+
     // Verificar estado del chat
     const stateFromChatState = chatState && chatState.chatStatus === 'human';
     const stateFromChat = chat && chat.chatStatus === 'human';
-    
+
     // Si no está en modo humano en ninguno de los dos lugares, error
     if (!stateFromChatState && !stateFromChat) {
-      console.log(`Error: Chat ${chatId} no está en modo humano. Estado:`, 
-        chatState ? chatState.chatStatus : 'no existe ChatState', 
+      console.log(`Error: Chat ${chatId} no está en modo humano. Estado:`,
+        chatState ? chatState.chatStatus : 'no existe ChatState',
         chat ? chat.chatStatus : 'no existe Chat');
       return res.status(403).json({ msg: 'No se puede enviar mensaje manual cuando el chat está en modo bot' });
     }
@@ -439,11 +442,11 @@ exports.sendManualMessage = async (req, res) => {
         content: content.substring(0, 50) + '...',
         error: whatsappError.message
       });
-      
+
       // Actualizar el estado del mensaje como failed pero no fallar la respuesta
-      await Message.findByIdAndUpdate(newMessage._id, { 
+      await Message.findByIdAndUpdate(newMessage._id, {
         status: 'failed',
-        errorMessage: whatsappError.message 
+        errorMessage: whatsappError.message
       });
     }
 
@@ -467,7 +470,7 @@ exports.sendManualMessage = async (req, res) => {
       });
     }
 
-    
+
 
     // Actualizar el tiempo de control manual en ChatState o Chat
     if (chatState) {
@@ -475,7 +478,7 @@ exports.sendManualMessage = async (req, res) => {
       await chatState.save();
       console.log('Tiempo de control renovado en ChatState');
     }
-    
+
     if (chat && chat.chatStatus === 'human') {
       chat.statusChangeTime = new Date(); // Renovar el tiempo también en Chat
       await chat.save();
@@ -571,7 +574,7 @@ exports.findChatByPhone = async (req, res) => {
 
     // Buscar en la colección de mensajes
     const chats = await Message.aggregate([
-      { 
+      {
         $match: {
           clientId: clientId,
           chatId: { $ne: null },
@@ -579,14 +582,14 @@ exports.findChatByPhone = async (req, res) => {
         }
       },
       { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
-      { 
+      {
         $group: {
           _id: "$chatId",
           lastMessage: { $first: "$content" },
           lastMessageTimestamp: { $first: "$timestamp" },
           phoneNumber: { $first: "$phoneNumber" },
-          contactName: { 
-            $first: { 
+          contactName: {
+            $first: {
               $cond: [
                 {
                   $and: [
@@ -603,7 +606,7 @@ exports.findChatByPhone = async (req, res) => {
           clientId: { $first: "$clientId" }
         }
       },
-      { 
+      {
         $project: {
           _id: 0,
           chatId: "$_id",
@@ -620,8 +623,8 @@ exports.findChatByPhone = async (req, res) => {
     const matchingChat = chats.find(chat => {
       const normalizedChatPhone = normalizePhone(chat.phoneNumber);
       return normalizedChatPhone === normalizedInput ||
-             normalizedChatPhone.includes(normalizedInput) ||
-             normalizedInput.includes(normalizedChatPhone);
+        normalizedChatPhone.includes(normalizedInput) ||
+        normalizedInput.includes(normalizedChatPhone);
     });
 
     if (!matchingChat) {
@@ -629,9 +632,9 @@ exports.findChatByPhone = async (req, res) => {
     }
 
     // Obtener el estado y tags del chat
-    const chatDoc = await Chat.findOne({ 
-      chatId: matchingChat.chatId, 
-      clientId 
+    const chatDoc = await Chat.findOne({
+      chatId: matchingChat.chatId,
+      clientId
     }).select('chatId chatStatus statusChangeTime tags').lean();
 
     // Verificar timeout de 30 minutos

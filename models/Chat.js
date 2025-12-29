@@ -24,6 +24,15 @@ const ChatSchema = new mongoose.Schema({
     default: null,
     index: true // Index for faster queries
   },
+  assignedAdvisorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Advisor',
+    default: null
+  },
+  assignedAdvisorName: {
+    type: String,
+    default: null
+  },
   lastMessage: {
     type: String,
     default: '',
