@@ -19,6 +19,11 @@ const ChatSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  ctwa_clid: {
+    type: String,
+    default: null,
+    index: true // Index for faster queries
+  },
   lastMessage: {
     type: String,
     default: '',
@@ -47,10 +52,10 @@ const ChatSchema = new mongoose.Schema({
     default: null
   },
   tags: [{
-  type: String,
-  trim: true,
-  lowercase: true
-}]
+    type: String,
+    trim: true,
+    lowercase: true
+  }]
 });
 
 module.exports = mongoose.model('Chat', ChatSchema);

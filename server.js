@@ -78,6 +78,9 @@ app.use('/api/custom-tables', require('./routes/customTables'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/faqs', require('./routes/faqs'));
 
+// ✨ NUEVO: Rutas de Meta Conversions API
+app.use('/api/meta', require('./routes/meta'));
+
 // ==================== ENDPOINT N8N ====================
 
 // ✨ API ENDPOINT PRINCIPAL - Notificación de n8n (CON AUTENTICACIÓN)
@@ -95,13 +98,13 @@ app.post('/api/message-notification', authenticateN8N, async (req, res) => {
     // }
 
     const messageData = req.body;
-    
+
     // Validación básica
     if (!messageData.clientId) {
       console.error('❌ clientId faltante en notificación');
-      return res.status(400).json({ 
-        success: false, 
-        error: 'clientId requerido' 
+      return res.status(400).json({
+        success: false,
+        error: 'clientId requerido'
       });
     }
 
@@ -125,18 +128,18 @@ app.post('/api/message-notification', authenticateN8N, async (req, res) => {
       timestamp: messageData.timestamp || new Date().toISOString(),
       phoneNumber: messageData.phoneNumber
     });
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Notificación procesada y transmitida vía SSE',
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('❌ Error procesando notificación de n8n:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Error interno del servidor' 
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
     });
   }
 });
