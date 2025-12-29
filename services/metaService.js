@@ -30,7 +30,7 @@ function generateEventId(chatId, timestamp) {
 async function sendConversionEvent(config, eventData) {
     try {
         const { metaDatasetId, metaAccessToken, metaTestEventCode } = config;
-        const { eventName, phoneNumber, chatId, value, currency = 'USD' } = eventData;
+        const { eventName, phoneNumber, chatId, value, currency = 'USD', ctwaClid } = eventData;
 
         // Validate required fields
         if (!metaDatasetId || !metaAccessToken) {
@@ -48,12 +48,17 @@ async function sendConversionEvent(config, eventData) {
         // Hash phone number
         const hashedPhone = hashPhoneNumber(phoneNumber);
 
+        // Determine action_source based on ctwa_clid availability
+        const actionSource = ctwaClid ? 'business_messaging' : 'system_generated';
+
+        console.log(`📊 Enviando evento a Meta con action_source: ${actionSource}${ctwaClid ? ' (con ctwa_clid)' : ''}`);
+
         // Build event data matching Meta's format
         const event = {
             event_name: eventName,
             event_time: eventTime,
             event_id: eventId,
-            action_source: 'system_generated',
+            action_source: actionSource,
             user_data: {
                 ph: [hashedPhone]
             },
@@ -62,6 +67,13 @@ async function sendConversionEvent(config, eventData) {
                 event_time: eventTime
             }
         };
+
+        // Add ctwa_clid and messaging_channel if available
+        if (ctwaClid) {
+            event.messaging_channel = 'whatsapp';
+            event.ctwa_clid = ctwaClid;
+            console.log(`🔑 Usando ctwa_clid: ${ctwaClid}`);
+        }
 
         // Add custom_data if value is provided
         if (value !== null && value !== undefined) {

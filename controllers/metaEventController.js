@@ -57,7 +57,8 @@ exports.sendManualEvent = async (req, res) => {
                 phoneNumber: chat.phoneNumber,
                 chatId: chat.chatId,
                 value: value || null,
-                currency: currency || 'USD'
+                currency: currency || 'USD',
+                ctwaClid: chat.ctwa_clid || null // 🔑 Incluir ctwa_clid si existe
             }
         );
 

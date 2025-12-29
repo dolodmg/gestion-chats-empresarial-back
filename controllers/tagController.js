@@ -188,7 +188,8 @@ exports.addTagToChat = async (req, res) => {
               phoneNumber: chat.phoneNumber,
               chatId: chat.chatId,
               value: mapping.defaultValue,
-              currency: mapping.defaultCurrency
+              currency: mapping.defaultCurrency,
+              ctwaClid: chat.ctwa_clid || null // 🔑 Pasar ctwa_clid si existe
             }
           );
 
