@@ -369,6 +369,16 @@ exports.getTableData = async (req, res) => {
 
     console.log(`✅ Datos obtenidos: ${data.length} registros de ${total} totales`);
 
+    // 🔍 DEBUG: Ver primer registro con campos de asesor
+    if (data.length > 0) {
+      console.log('🔍 Primer registro:', {
+        _id: data[0]._id,
+        assignedAdvisorName: data[0].assignedAdvisorName,
+        assignedAdvisorId: data[0].assignedAdvisorId,
+        assignedAt: data[0].assignedAt
+      });
+    }
+
     res.json({
       success: true,
       data,
@@ -396,6 +406,7 @@ exports.getTableData = async (req, res) => {
 
 /**
  * ✅ FUNCIÓN CORREGIDA - Crear un nuevo registro en una tabla personalizada
+ * 🔑 NUEVO: Acepta tableId (ObjectId) O collectionName (string)
  */
 exports.createTableRecord = async (req, res) => {
   try {
@@ -405,8 +416,17 @@ exports.createTableRecord = async (req, res) => {
     console.log(`📝 Creando registro para tabla: ${tableId}`);
     console.log(`📋 Datos recibidos:`, recordData);
 
-    // Obtener la definición de la tabla
-    const customTable = await CustomTable.findById(tableId);
+    // 🔑 NUEVO: Obtener la definición de la tabla (por ID o collectionName)
+    let customTable;
+    if (mongoose.Types.ObjectId.isValid(tableId)) {
+      // Buscar por ID (comportamiento original)
+      customTable = await CustomTable.findById(tableId);
+    } else {
+      // Buscar por collectionName
+      console.log(`🔍 Buscando tabla por collectionName: ${tableId}`);
+      customTable = await CustomTable.findOne({ collectionName: tableId });
+    }
+
     if (!customTable) {
       return res.status(404).json({
         success: false,
@@ -416,8 +436,8 @@ exports.createTableRecord = async (req, res) => {
 
     console.log(`📋 Tabla encontrada: ${customTable.tableName} (${customTable.collectionName})`);
 
-    // Verificar permisos
-    if (req.user.role !== 'admin' && req.user.clientId !== customTable.clientId) {
+    // Verificar permisos (solo si hay usuario JWT, N8N no tiene req.user)
+    if (req.user && req.user.role !== 'admin' && req.user.clientId !== customTable.clientId) {
       return res.status(403).json({
         success: false,
         error: 'No tienes permisos para crear registros en esta tabla'
@@ -447,7 +467,7 @@ exports.createTableRecord = async (req, res) => {
         // Obtener el siguiente asesor para esta tabla
         const advisor = await advisorService.getNextAdvisorForTable(
           customTable.clientId,
-          tableId
+          customTable._id.toString() // 🔑 Usar el _id real de la tabla
         );
 
         if (advisor) {

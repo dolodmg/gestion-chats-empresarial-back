@@ -16,7 +16,26 @@ const MetaTagMappingSchema = new mongoose.Schema({
     eventName: {
         type: String,
         required: true,
-        enum: ['Purchase', 'Lead', 'Contact', 'Schedule'],
+        enum: [
+            // Standard Meta Pixel Conversion Events
+            'Purchase',           // Compra completada
+            'Lead',              // Lead generado
+            'Contact',           // Contacto
+            'Schedule',          // Agendar cita
+            'AddToCart',         // Agregar al carrito
+            'ViewContent',       // Ver contenido
+            'InitiateCheckout',  // Iniciar checkout
+            'AddPaymentInfo',    // Agregar info de pago
+            'CompleteRegistration', // Completar registro
+            'Search',            // Búsqueda
+            'AddToWishlist',     // Agregar a lista de deseos
+            'Subscribe',         // Suscripción
+            'StartTrial',        // Iniciar prueba
+            'SubmitApplication', // Enviar aplicación
+            'FindLocation',      // Encontrar ubicación
+            'Donate',            // Donación
+            'CustomizeProduct'   // Personalizar producto
+        ],
         trim: true
     },
     defaultValue: {
