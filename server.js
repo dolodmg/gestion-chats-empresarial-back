@@ -20,8 +20,8 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: '*',
-  credentials: true
+    origin: '*',
+    credentials: true
 }));
 app.use(express.json());
 
@@ -90,83 +90,83 @@ app.use('/api/advisors', require('./routes/advisors'));
 
 // ✨ API ENDPOINT PRINCIPAL - Notificación de n8n (CON AUTENTICACIÓN)
 app.post('/api/message-notification', authenticateN8N, async (req, res) => {
-  try {
-    console.log('📞 Notificación recibida de n8n');
+    try {
+        console.log('📞 Notificación recibida de n8n');
 
-    // ⏸️ COMENTADO: Observer no disponible check
-    // if (!messageMonitor) {
-    //   console.error('❌ Observer no disponible');
-    //   return res.status(503).json({ 
-    //     success: false, 
-    //     error: 'Observer no disponible' 
-    //   });
-    // }
+        // ⏸️ COMENTADO: Observer no disponible check
+        // if (!messageMonitor) {
+        //   console.error('❌ Observer no disponible');
+        //   return res.status(503).json({ 
+        //     success: false, 
+        //     error: 'Observer no disponible' 
+        //   });
+        // }
 
-    const messageData = req.body;
+        const messageData = req.body;
 
-    // Validación básica
-    if (!messageData.clientId) {
-      console.error('❌ clientId faltante en notificación');
-      return res.status(400).json({
-        success: false,
-        error: 'clientId requerido'
-      });
+        // Validación básica
+        if (!messageData.clientId) {
+            console.error('❌ clientId faltante en notificación');
+            return res.status(400).json({
+                success: false,
+                error: 'clientId requerido'
+            });
+        }
+
+        // Log de la notificación recibida
+        console.log(`📨 Datos recibidos:`, {
+            clientId: messageData.clientId,
+            chatId: messageData.chatId,
+            sender: messageData.sender,
+            timestamp: messageData.timestamp
+        });
+
+        // ⏸️ COMENTADO: Notificar al Observer para email monitoring
+        // messageMonitor.onNewMessage(messageData);
+
+        // ✨ NUEVO: Notificar a clientes SSE conectados en tiempo real
+        sseService.notifyNewMessage({
+            chatId: messageData.chatId,
+            clientId: messageData.clientId,
+            sender: messageData.sender || 'user',
+            content: messageData.content,
+            timestamp: messageData.timestamp || new Date().toISOString(),
+            phoneNumber: messageData.phoneNumber
+        });
+
+        res.json({
+            success: true,
+            message: 'Notificación procesada y transmitida vía SSE',
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('❌ Error procesando notificación de n8n:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor'
+        });
     }
-
-    // Log de la notificación recibida
-    console.log(`📨 Datos recibidos:`, {
-      clientId: messageData.clientId,
-      chatId: messageData.chatId,
-      sender: messageData.sender,
-      timestamp: messageData.timestamp
-    });
-
-    // ⏸️ COMENTADO: Notificar al Observer para email monitoring
-    // messageMonitor.onNewMessage(messageData);
-
-    // ✨ NUEVO: Notificar a clientes SSE conectados en tiempo real
-    sseService.notifyNewMessage({
-      chatId: messageData.chatId,
-      clientId: messageData.clientId,
-      sender: messageData.sender || 'user',
-      content: messageData.content,
-      timestamp: messageData.timestamp || new Date().toISOString(),
-      phoneNumber: messageData.phoneNumber
-    });
-
-    res.json({
-      success: true,
-      message: 'Notificación procesada y transmitida vía SSE',
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error('❌ Error procesando notificación de n8n:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Error interno del servidor'
-    });
-  }
 });
 
 // ==================== ENDPOINTS DE MONITOREO ====================
 
 // ✨ Estadísticas de conexiones SSE (para debugging)
 app.get('/api/sse/stats', async (req, res) => {
-  try {
-    const stats = {
-      totalConnections: sseService.getTotalConnections(),
-      clients: sseService.getClientsInfo()
-    };
-    res.json({
-      success: true,
-      stats,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error obteniendo estadísticas SSE:', error);
-    res.status(500).json({ error: error.message });
-  }
+    try {
+        const stats = {
+            totalConnections: sseService.getTotalConnections(),
+            clients: sseService.getClientsInfo()
+        };
+        res.json({
+            success: true,
+            stats,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error obteniendo estadísticas SSE:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // ⏸️ COMENTADO: Endpoints del Observer para email monitoring
@@ -257,89 +257,89 @@ app.use(express.static('public'));
 
 // Rutas principales
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/index.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/admin.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.get('/profile.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'profile.html'));
+    res.sendFile(path.join(__dirname, 'public', 'profile.html'));
 });
 
 app.get('/assistant.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
+    res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
 });
 
 app.get('/inscriptions.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'inscriptions.html'));
+    res.sendFile(path.join(__dirname, 'public', 'inscriptions.html'));
 });
 
 app.get('/table-data.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
+    res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
 });
 
 app.get('/table-management.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'table-management.html'));
+    res.sendFile(path.join(__dirname, 'public', 'table-management.html'));
 });
 
 app.get('/campaigns.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'campaigns.html'));
+    res.sendFile(path.join(__dirname, 'public', 'campaigns.html'));
 });
 
 // Rutas amigables (sin .html)
 app.get('/home', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/profile', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'profile.html'));
+    res.sendFile(path.join(__dirname, 'public', 'profile.html'));
 });
 
 app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.get('/assistant', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
+    res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
 });
 
 app.get('/inscriptions', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'inscriptions.html'));
+    res.sendFile(path.join(__dirname, 'public', 'inscriptions.html'));
 });
 
 app.get('/table-data', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
+    res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
 });
 
 app.get('/data', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
+    res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
 });
 
 app.get('/mis-datos', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
+    res.sendFile(path.join(__dirname, 'public', 'table-data.html'));
 });
 
 app.get('/table-management', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'table-management.html'));
+    res.sendFile(path.join(__dirname, 'public', 'table-management.html'));
 });
 
 app.get('/campaigns', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'campaigns.html'));
+    res.sendFile(path.join(__dirname, 'public', 'campaigns.html'));
 });
 
 // Ruta para manejar cualquier otra petición (404)
 app.get('*', (req, res) => {
-  res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ==================== SERVER INITIALIZATION ====================
@@ -358,39 +358,39 @@ const PORT = process.env.PORT || 5000;
 
 // Manejar errores no capturados
 process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Promise Rejection:', err);
+    console.error('❌ Unhandled Promise Rejection:', err);
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
-  // ⏸️ COMENTADO: Stop observer
-  // if (messageMonitor) {
-  //   messageMonitor.stop();
-  // }
-  process.exit(1);
+    console.error('❌ Uncaught Exception:', err);
+    // ⏸️ COMENTADO: Stop observer
+    // if (messageMonitor) {
+    //   messageMonitor.stop();
+    // }
+    process.exit(1);
 });
 
 // Manejo de cierre graceful
 process.on('SIGTERM', () => {
-  console.log('🛑 Recibida señal SIGTERM, cerrando servidor...');
-  // ⏸️ COMENTADO: Stop observer
-  // if (messageMonitor) {
-  //   messageMonitor.stop();
-  // }
-  setTimeout(() => {
-    process.exit(0);
-  }, 1000);
+    console.log('🛑 Recibida señal SIGTERM, cerrando servidor...');
+    // ⏸️ COMENTADO: Stop observer
+    // if (messageMonitor) {
+    //   messageMonitor.stop();
+    // }
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
 });
 
 process.on('SIGINT', () => {
-  console.log('🛑 Recibida señal SIGINT (Ctrl+C), cerrando servidor...');
-  // ⏸️ COMENTADO: Stop observer
-  // if (messageMonitor) {
-  //   messageMonitor.stop();
-  // }
-  setTimeout(() => {
-    process.exit(0);
-  }, 1000);
+    console.log('🛑 Recibida señal SIGINT (Ctrl+C), cerrando servidor...');
+    // ⏸️ COMENTADO: Stop observer
+    // if (messageMonitor) {
+    //   messageMonitor.stop();
+    // }
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
 });
 
 // Iniciar servidor
