@@ -5,7 +5,7 @@ const nodemailer = require('nodemailer');
  * Configuración específica para servidores SMTP de Hostinger
  */
 class EmailService {
-  
+
   constructor() {
     // Configuración del transporter para Hostinger
     this.transporter = nodemailer.createTransport({
@@ -39,16 +39,37 @@ class EmailService {
   }
 
   /**
+   * Create transporter from email credential
+   */
+  createTransporterFromCredential(credential, plaintextPassword) {
+    return nodemailer.createTransport({
+      host: credential.host,
+      port: credential.port,
+      secure: credential.secure,
+      auth: {
+        user: credential.user,
+        pass: plaintextPassword
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 60000,
+      greetingTimeout: 30000,
+      socketTimeout: 60000
+    });
+  }
+
+  /**
    * Verificar configuración del servicio de email
    */
   async verifyEmailConfig() {
     try {
       console.log('🔧 Verificando configuración de email empresarial...');
-      
+
       // Verificar conexión con timeout
       const verified = await Promise.race([
         this.transporter.verify(),
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout verificando email')), 15000)
         )
       ]);
@@ -58,10 +79,10 @@ class EmailService {
         console.log(`✅ Conectado al servidor: ${process.env.SMTP_HOST || 'smtp.hostinger.com'}`);
         return true;
       }
-      
+
     } catch (error) {
       console.error('❌ Error en configuración de email empresarial:', error.message);
-      
+
       // Mostrar ayuda específica según el tipo de error
       if (error.code === 'EAUTH') {
         console.error('💡 Problema de autenticación - Verifica email y contraseña');
@@ -70,7 +91,7 @@ class EmailService {
       } else if (error.code === 'ETIMEDOUT') {
         console.error('💡 Timeout de conexión - Verifica configuración de red');
       }
-      
+
       return false;
     }
   }
@@ -82,12 +103,12 @@ class EmailService {
     try {
       const minutesInactive = Math.round(timeDifference / (60 * 1000));
       const hoursInactive = Math.round(minutesInactive / 60);
-      
+
       console.log(`📧 Preparando notificación de inactividad (${minutesInactive} min sin actividad)`);
-      
+
       // Generar contenido del email
       const emailContent = this.generateInactivityEmailContent(lastMessage, minutesInactive, hoursInactive);
-      
+
       // Configurar el email
       const mailOptions = {
         from: {
@@ -106,29 +127,29 @@ class EmailService {
       };
 
       console.log('📤 Enviando notificación de inactividad...');
-      
+
       // Enviar email con timeout
       const info = await Promise.race([
         this.transporter.sendMail(mailOptions),
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout enviando email')), 30000)
         )
       ]);
-      
+
       console.log('✅ Notificación de inactividad enviada correctamente');
       console.log(`📧 Message ID: ${info.messageId}`);
       console.log(`📧 Emails enviados a: ${this.NOTIFICATION_EMAILS.join(', ')}`);
-      
+
       return {
         success: true,
         messageId: info.messageId,
         recipients: this.NOTIFICATION_EMAILS,
         timestamp: new Date().toISOString()
       };
-      
+
     } catch (error) {
       console.error('❌ Error enviando notificación de inactividad:', error.message);
-      
+
       // Log adicional para debugging
       if (error.code) {
         console.error(`   - Código de error: ${error.code}`);
@@ -136,7 +157,7 @@ class EmailService {
       if (error.response) {
         console.error(`   - Respuesta del servidor: ${error.response}`);
       }
-      
+
       return {
         success: false,
         error: error.message,
@@ -160,7 +181,7 @@ class EmailService {
       second: '2-digit'
     });
 
-    const timeDisplay = hoursInactive > 1 
+    const timeDisplay = hoursInactive > 1
       ? `${hoursInactive} horas y ${minutesInactive % 60} minutos`
       : `${minutesInactive} minutos`;
 
@@ -418,7 +439,7 @@ Esta es una notificación automática del sistema de monitoreo
   async sendTestEmail() {
     try {
       console.log('📧 Preparando email de prueba...');
-      
+
       const currentTime = new Date().toLocaleString('es-ES', {
         timeZone: 'America/Argentina/Buenos_Aires'
       });
@@ -486,25 +507,25 @@ Sistema INTELIGENTE v1.0 - Monitoreo Automático de WhatsApp
       };
 
       console.log('📤 Enviando email de prueba...');
-      
+
       const info = await Promise.race([
         this.transporter.sendMail(mailOptions),
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout enviando email de prueba')), 30000)
         )
       ]);
-      
+
       console.log('✅ Email de prueba enviado correctamente');
       console.log(`📧 Message ID: ${info.messageId}`);
       console.log(`📧 Destinatarios: ${this.NOTIFICATION_EMAILS.join(', ')}`);
-      
+
       return {
         success: true,
         messageId: info.messageId,
         recipients: this.NOTIFICATION_EMAILS,
         timestamp: new Date().toISOString()
       };
-      
+
     } catch (error) {
       console.error('❌ Error enviando email de prueba:', error.message);
       return {
@@ -513,6 +534,78 @@ Sistema INTELIGENTE v1.0 - Monitoreo Automático de WhatsApp
         timestamp: new Date().toISOString()
       };
     }
+  }
+
+  /**
+   * Enviar email de campaña publicitaria
+   */
+  async sendCampaignEmail({ to, subject, html, text, recipientName, transporter, fromName, fromEmail }) {
+    try {
+      // Use custom transporter if provided
+      const emailTransporter = transporter || this.transporter;
+      const senderName = fromName || process.env.EMAIL_FROM_NAME || 'Campañas';
+      const senderEmail = fromEmail || process.env.EMAIL_USER;
+
+      const mailOptions = {
+        from: {
+          name: senderName,
+          address: senderEmail
+        },
+        to: to,
+        subject: subject,
+        html: html,
+        text: text || html.replace(/<[^>]*>/g, ''),
+        headers: {
+          'X-Mailer': 'Sistema INTELIGENTE - Campañas v1.0'
+        }
+      };
+
+      // Personalizar contenido si hay nombre del destinatario
+      if (recipientName) {
+        mailOptions.html = mailOptions.html.replace(/\{\{nombre\}\}/gi, recipientName);
+        mailOptions.text = mailOptions.text.replace(/\{\{nombre\}\}/gi, recipientName);
+      }
+
+      const info = await Promise.race([
+        emailTransporter.sendMail(mailOptions),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout enviando email de campaña')), 30000)
+        )
+      ]);
+
+      return {
+        success: true,
+        messageId: info.messageId,
+        recipient: to,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error(`❌ Error enviando email de campaña a ${to}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Validar lista de emails
+   */
+  validateEmailList(emails) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const results = {
+      valid: [],
+      invalid: []
+    };
+
+    emails.forEach(email => {
+      const trimmedEmail = email.trim().toLowerCase();
+      if (emailRegex.test(trimmedEmail)) {
+        results.valid.push(trimmedEmail);
+      } else {
+        results.invalid.push(email);
+      }
+    });
+
+    return results;
   }
 }
 

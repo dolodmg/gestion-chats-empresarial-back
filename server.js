@@ -77,6 +77,8 @@ app.use('/api/inscriptions', require('./routes/inscriptions'));
 app.use('/api/custom-tables', require('./routes/customTables'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/faqs', require('./routes/faqs'));
+app.use('/api/campaigns', require('./routes/campaigns'));
+app.use('/api/email-credentials', require('./routes/emailCredentials'));
 
 // ==================== ENDPOINT N8N ====================
 
@@ -95,13 +97,13 @@ app.post('/api/message-notification', authenticateN8N, async (req, res) => {
     // }
 
     const messageData = req.body;
-    
+
     // Validación básica
     if (!messageData.clientId) {
       console.error('❌ clientId faltante en notificación');
-      return res.status(400).json({ 
-        success: false, 
-        error: 'clientId requerido' 
+      return res.status(400).json({
+        success: false,
+        error: 'clientId requerido'
       });
     }
 
@@ -125,18 +127,18 @@ app.post('/api/message-notification', authenticateN8N, async (req, res) => {
       timestamp: messageData.timestamp || new Date().toISOString(),
       phoneNumber: messageData.phoneNumber
     });
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Notificación procesada y transmitida vía SSE',
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('❌ Error procesando notificación de n8n:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Error interno del servidor' 
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
     });
   }
 });
@@ -280,6 +282,10 @@ app.get('/table-management.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'table-management.html'));
 });
 
+app.get('/campaigns.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'campaigns.html'));
+});
+
 // Rutas amigables (sin .html)
 app.get('/home', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -319,6 +325,10 @@ app.get('/mis-datos', (req, res) => {
 
 app.get('/table-management', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'table-management.html'));
+});
+
+app.get('/campaigns', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'campaigns.html'));
 });
 
 // Ruta para manejar cualquier otra petición (404)

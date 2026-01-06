@@ -1,6 +1,10 @@
 const axios = require('axios');
 const dotenv = require('dotenv');
 const AssistantPrompt = require('../models/AssistantPrompt');
+const Message = require('../models/Message');
+const Chat = require('../models/Chat');
+const ImprovementSuggestion = require('../models/ImprovementSuggestion');
+const FAQ = require('../models/FAQ'); 
 
 dotenv.config();
 
@@ -181,6 +185,42 @@ function debugSettings(workflow) {
   }
   console.log('========================');
 }
+
+async function callAI(prompt) {
+  try {
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-4o-mini', 
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un experto Auditor de Calidad de Chatbots. Respondes ÚNICAMENTE en formato JSON válido.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3, 
+          response_format: { type: "json_object" }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+          }
+        }
+      );
+
+      const content = response.data.choices[0].message.content;
+      return JSON.parse(content);
+    } catch (error) {
+      console.error('Error llamando a OpenAI:', error.response?.data || error.message);
+      throw new Error('Falló el análisis de IA');
+    }
+  }
+
 
 /**
  * Controlador para obtener el prompt del asistente
@@ -554,11 +594,9 @@ exports.restorePrompt = async (req, res) => {
       });
     }
 
-    // Usar el método de actualización existente
     req.body.prompt = promptToRestore.promptText;
     req.body.description = `Restaurado desde versión ${promptToRestore.version}`;
 
-    // Llamar al método de actualización
     await exports.updateAssistantPrompt(req, res);
 
   } catch (error) {
@@ -568,5 +606,226 @@ exports.restorePrompt = async (req, res) => {
       error: 'Error del servidor al restaurar el prompt',
       details: error.message
     });
+  }
+};
+    
+  exports.generateImprovements = async (req, res) => {
+  try {
+    const clientId = req.user.role === 'admin'
+      ? req.query.clientId
+      : req.user.clientId;
+
+    console.log(`🕵️‍♀️ [DEBUG] Iniciando auditoría para cliente: ${clientId}`);
+
+    // 1. Obtener System Message
+    const currentPromptData = await AssistantPrompt.findOne({ clientId, isActive: true }).sort({ createdAt: -1 });
+    const currentSystemMessage = currentPromptData ? currentPromptData.promptText : "No definido o genérico";
+
+    // 2. Obtener Chats Recientes
+    const recentChats = await Chat.find({ clientId })
+      .sort({ updatedAt: -1 })
+      .limit(20);
+
+    console.log(`[DEBUG] Chats encontrados en DB: ${recentChats.length}`);
+
+    if (recentChats.length === 0) {
+      return res.json({ success: true, message: 'No hay chats.', suggestions: [] });
+    }
+
+    // 3. Serializar conversaciones
+    let transcript = "";
+    for (const chat of recentChats) {
+      const msgs = await Message.find({ chatId: chat.chatId })
+        .sort({ timestamp: 1 })
+        .limit(15); 
+      
+      if (msgs.length < 2) continue; 
+
+      transcript += `\n--- CHAT ${chat.chatId.substring(0, 4)} ---\n`;
+      msgs.forEach(m => {
+        const role = m.sender === 'user' ? 'USUARIO' : 'BOT';
+        const content = m.content ? m.content.replace(/\n/g, ' ').substring(0, 200) : ''; 
+        transcript += `${role}: ${content}\n`;
+      });
+    }
+
+    if (transcript.length < 50) {
+      return res.json({ success: true, message: 'Transcript vacío.', suggestions: [] });
+    }
+
+    // 4. Prompt Auditor
+    const auditorPrompt = `Analiza el desempeño del bot.
+CONTEXTO:
+"""
+${currentSystemMessage.substring(0, 3000)}
+"""
+CHATS:
+"""
+${transcript.substring(0, 15000)}
+"""
+TAREA: Detectar fallas.
+CASOS:
+1. KNOWLEDGE_GAP (Bot no sabe responder).
+2. ESCALATION (Piden humano/Enojo).
+3. SENTIMENT (Quejas).
+
+SALIDA JSON:
+Devuelve un objeto JSON con una propiedad "suggestions" que contenga el array de problemas detectados.
+Ejemplo:
+{
+  "suggestions": [
+    {"type": "knowledge_gap", "title": "...", "description": "...", "severity": "high"}
+  ]
+}`;
+
+    // 5. Llamar a IA
+    console.log('[DEBUG] Llamando a OpenAI...');
+    const aiResponse = await callAI(auditorPrompt);
+    console.log('[DEBUG] Respuesta OpenAI Raw:', JSON.stringify(aiResponse, null, 2));
+
+    // --- LÓGICA DE EXTRACCIÓN ROBUSTA (EL ARREGLO) ---
+    let suggestionsData = [];
+
+    if (Array.isArray(aiResponse)) {
+      suggestionsData = aiResponse;
+    } else if (aiResponse.suggestions && Array.isArray(aiResponse.suggestions)) {
+      suggestionsData = aiResponse.suggestions;
+    } else if (aiResponse.issues && Array.isArray(aiResponse.issues)) {
+      suggestionsData = aiResponse.issues; // <--- Aquí atrapamos el caso de tu log
+    } else {
+      // Intento final: buscar cualquier propiedad que sea un array
+      const keys = Object.keys(aiResponse);
+      for (const key of keys) {
+        if (Array.isArray(aiResponse[key])) {
+          suggestionsData = aiResponse[key];
+          console.log(`[DEBUG] Array encontrado en propiedad: '${key}'`);
+          break;
+        }
+      }
+    }
+
+    // 6. Guardar resultados
+    await ImprovementSuggestion.deleteMany({ clientId, status: 'pending' });
+
+    const savedSuggestions = [];
+    if (Array.isArray(suggestionsData)) {
+      for (const sugg of suggestionsData) {
+        const type = sugg.type ? sugg.type.toLowerCase() : '';
+        
+        if (['knowledge_gap', 'escalation', 'sentiment'].includes(type)) {
+            const newSugg = await ImprovementSuggestion.create({
+              clientId,
+              type: type,
+              title: sugg.title,
+              description: sugg.description,
+              severity: sugg.severity || 'medium',
+              status: 'pending'
+            });
+            savedSuggestions.push(newSugg);
+        }
+      }
+    }
+
+    console.log(`[DEBUG] Total guardado en DB: ${savedSuggestions.length}`);
+
+    res.json({
+      success: true,
+      count: savedSuggestions.length,
+      suggestions: savedSuggestions
+    });
+
+  } catch (error) {
+    console.error('❌ Error en generateImprovements:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.getImprovements = async (req, res) => {
+  try {
+    const clientId = req.user.role === 'admin'
+      ? req.query.clientId
+      : req.user.clientId;
+
+      const suggestions = await ImprovementSuggestion.find({ clientId, status: 'pending' })
+        .sort({ severity: -1, createdAt: -1 }); 
+
+      res.json({ success: true, suggestions });
+    } catch (error) {
+      console.error('Error obteniendo mejoras:', error);
+      res.status(500).json({ success: false, error: 'Error al obtener mejoras' });
+    }
+};
+
+exports.getAnalytics = async (req, res) => {
+  try {
+    const clientId = req.user.role === 'admin' ? req.query.clientId : req.user.clientId;
+    
+    // Rango: Últimos 7 días
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+
+    console.log(`📊 Analytics reales para ${clientId}`);
+
+    // 1. VOLUMEN TOTAL (Real)
+    const volumeStats = await Message.aggregate([
+      { $match: { clientId, timestamp: { $gte: startDate, $lte: endDate } } },
+      { $group: { _id: "$sender", count: { $sum: 1 } } }
+    ]);
+
+    const received = volumeStats.find(s => s._id === 'user')?.count || 0;
+    const sent = volumeStats.find(s => s._id === 'bot')?.count || 0;
+
+    const dailyTrend = await Message.aggregate([
+      { $match: { clientId, timestamp: { $gte: startDate, $lte: endDate } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
+          total: { $sum: 1 },
+          userCount: { $sum: { $cond: [{ $eq: ["$sender", "user"] }, 1, 0] } }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    const peakHours = await Message.aggregate([
+      { $match: { clientId, timestamp: { $gte: startDate } } },
+      { $group: { _id: { $hour: "$timestamp" }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 3 }
+    ]);
+
+    const topCategories = await FAQ.aggregate([
+      { $match: { clientId, status: 'active' } },
+      { $group: { _id: "$category", total: { $sum: "$totalCount" } } },
+      { $sort: { total: -1 } },
+      { $limit: 4 } 
+    ]);
+
+    let satisfactionRate = null;
+    if (received > 5) { 
+       const positiveMessages = await Message.countDocuments({
+         clientId, sender: 'user', timestamp: { $gte: startDate },
+         content: { $regex: /gracias|excelente|bueno|genial|sirve|ayuda/i }
+       });
+       satisfactionRate = Math.min(Math.round((positiveMessages / received) * 100) + 50, 100);
+    }
+
+    res.json({
+      success: true,
+      stats: {
+        received,
+        sent,
+        total: received + sent,
+        dailyTrend,
+        peakHours: peakHours.map(h => `${h._id}:00`),
+        topCategories: topCategories.map(c => ({ category: c._id, count: c.total })),
+        satisfactionRate 
+      }
+    });
+
+  } catch (error) {
+    console.error('Error analytics:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };

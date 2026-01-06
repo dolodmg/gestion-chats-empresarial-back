@@ -15,4 +15,8 @@ router.get('/prompt/history', auth, assistantController.getPromptHistory);
 // Restaurar un prompt específico del historial
 router.post('/prompt/restore/:promptId', auth, assistantController.restorePrompt);
 
+router.post('/improvements/generate', auth, assistantController.generateImprovements);
+router.get('/improvements', auth, assistantController.getImprovements);
+router.get('/analytics', auth, assistantController.getAnalytics);
+
 module.exports = router;
