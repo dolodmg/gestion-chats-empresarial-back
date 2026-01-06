@@ -81,51 +81,51 @@ const CustomTableSchema = new mongoose.Schema({
 CustomTableSchema.index({ clientId: 1, tableName: 1 });
 
 // Middleware para actualizar updatedAt
-CustomTableSchema.pre('save', function(next) {
+CustomTableSchema.pre('save', function (next) {
   this.updatedAt = new Date();
   next();
 });
 
 // Validación personalizada para nombres de colección
-CustomTableSchema.pre('save', function(next) {
+CustomTableSchema.pre('save', function (next) {
   // Validar formato del nombre de colección
   const collectionNameRegex = /^[a-zA-Z][a-zA-Z0-9_]*$/;
   if (!collectionNameRegex.test(this.collectionName)) {
     const error = new Error('El nombre de la colección debe empezar con una letra y solo contener letras, números y guiones bajos');
     return next(error);
   }
-  
+
   // Evitar nombres reservados
   const reservedNames = [
-    'users', 'chats', 'messages', 'chatstates', 'assistantprompts', 
+    'users', 'chats', 'messages', 'chatstates', 'assistantprompts',
     'inscriptions', 'customtables', 'admin', 'system'
   ];
-  
+
   if (reservedNames.includes(this.collectionName.toLowerCase())) {
     const error = new Error('El nombre de colección está reservado. Por favor, elige otro nombre');
     return next(error);
   }
-  
+
   next();
 });
 
 // Métodos estáticos
-CustomTableSchema.statics.findByClient = function(clientId) {
+CustomTableSchema.statics.findByClient = function (clientId) {
   return this.find({ clientId, isActive: true }).sort({ createdAt: -1 });
 };
 
-CustomTableSchema.statics.checkCollectionExists = async function(collectionName) {
+CustomTableSchema.statics.checkCollectionExists = async function (collectionName) {
   const existing = await this.findOne({ collectionName });
   return !!existing;
 };
 
 // Método para obtener esquema de validación para los datos
-CustomTableSchema.methods.getValidationSchema = function() {
+CustomTableSchema.methods.getValidationSchema = function () {
   const schema = {};
-  
+
   this.fields.forEach(field => {
     let fieldSchema = {};
-    
+
     switch (field.type) {
       case 'string':
       case 'email':
@@ -161,18 +161,23 @@ CustomTableSchema.methods.getValidationSchema = function() {
         }
         break;
     }
-    
+
     if (field.required) {
       fieldSchema.required = true;
     }
-    
+
     schema[field.name] = fieldSchema;
   });
-  
+
   // Agregar campos de auditoría automáticamente
   schema.createdAt = { type: Date, default: Date.now };
   schema.updatedAt = { type: Date, default: Date.now };
-  
+
+  // 🔑 NUEVO: Agregar campos de asesor automáticamente
+  schema.assignedAdvisorId = { type: mongoose.Schema.Types.ObjectId, ref: 'Advisor', required: false };
+  schema.assignedAdvisorName = { type: String, required: false };
+  schema.assignedAt = { type: Date, required: false };
+
   return schema;
 };
 

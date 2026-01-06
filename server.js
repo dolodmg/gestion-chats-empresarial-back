@@ -80,6 +80,12 @@ app.use('/api/faqs', require('./routes/faqs'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/email-credentials', require('./routes/emailCredentials'));
 
+// ✨ NUEVO: Rutas de Meta Conversions API
+app.use('/api/meta', require('./routes/meta'));
+
+// ✨ NUEVO: Rutas de Asesores
+app.use('/api/advisors', require('./routes/advisors'));
+
 // ==================== ENDPOINT N8N ====================
 
 // ✨ API ENDPOINT PRINCIPAL - Notificación de n8n (CON AUTENTICACIÓN)
