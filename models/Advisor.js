@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const AdvisorSchema = new mongoose.Schema({
     clientId: {
@@ -13,8 +14,14 @@ const AdvisorSchema = new mongoose.Schema({
     },
     email: {
         type: String,
-        default: '',
-        trim: true
+        required: true,
+        unique: true,
+        trim: true,
+        lowercase: true
+    },
+    password: {
+        type: String,
+        required: true
     },
     phone: {
         type: String,
@@ -37,11 +44,24 @@ const AdvisorSchema = new mongoose.Schema({
 
 // Índice compuesto para búsquedas eficientes
 AdvisorSchema.index({ clientId: 1, active: 1 });
+AdvisorSchema.index({ email: 1 });
 
-// Middleware para actualizar updatedAt
-AdvisorSchema.pre('save', function (next) {
+// Middleware para hashear password y actualizar updatedAt
+AdvisorSchema.pre('save', async function (next) {
     this.updatedAt = new Date();
-    next();
+
+    // Solo hashear la contraseña si ha sido modificada
+    if (!this.isModified('password')) {
+        return next();
+    }
+
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
 
 module.exports = mongoose.model('Advisor', AdvisorSchema);

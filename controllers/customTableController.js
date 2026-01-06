@@ -325,7 +325,7 @@ exports.getTableData = async (req, res) => {
     console.log(`📋 Tabla encontrada: ${customTable.tableName} (${customTable.collectionName})`);
 
     // Verificar permisos
-    if (req.user.role !== 'admin' && req.user.clientId !== customTable.clientId) {
+    if (req.user.role !== 'admin' && req.user.role !== 'advisor' && req.user.clientId !== customTable.clientId) {
       return res.status(403).json({
         success: false,
         error: 'No tienes permisos para ver estos datos'
@@ -340,15 +340,33 @@ exports.getTableData = async (req, res) => {
 
     // Construir filtro de búsqueda
     let filter = {};
+
+    // 🔑 NUEVO: Si es asesor, filtrar solo registros asignados
+    if (req.user.role === 'advisor') {
+      filter.assignedAdvisorId = req.user.advisorId;
+      console.log(`👤 Filtrando registros para asesor: ${req.user.advisorId}`);
+    }
+
     if (search) {
       const searchFields = customTable.fields
         .filter(field => ['string', 'email', 'phone', 'textarea'].includes(field.type))
         .map(field => field.name);
 
       if (searchFields.length > 0) {
-        filter.$or = searchFields.map(fieldName => ({
+        const searchConditions = searchFields.map(fieldName => ({
           [fieldName]: { $regex: search, $options: 'i' }
         }));
+
+        // Si ya hay filtro de asesor, combinar con AND
+        if (filter.assignedAdvisorId) {
+          filter.$and = [
+            { assignedAdvisorId: filter.assignedAdvisorId },
+            { $or: searchConditions }
+          ];
+          delete filter.assignedAdvisorId;
+        } else {
+          filter.$or = searchConditions;
+        }
       }
     }
 
@@ -541,7 +559,7 @@ exports.updateTableRecord = async (req, res) => {
     }
 
     // Verificar permisos
-    if (req.user.role !== 'admin' && req.user.clientId !== customTable.clientId) {
+    if (req.user.role !== 'admin' && req.user.role !== 'advisor' && req.user.clientId !== customTable.clientId) {
       return res.status(403).json({
         success: false,
         error: 'No tienes permisos para modificar registros en esta tabla'
@@ -553,6 +571,24 @@ exports.updateTableRecord = async (req, res) => {
       customTable.collectionName,
       customTable.getValidationSchema()
     );
+
+    // 🔑 NUEVO: Si es asesor, verificar que el registro le pertenece
+    if (req.user.role === 'advisor') {
+      const existingRecord = await DataModel.findById(recordId);
+      if (!existingRecord) {
+        return res.status(404).json({
+          success: false,
+          error: 'Registro no encontrado'
+        });
+      }
+
+      if (existingRecord.assignedAdvisorId?.toString() !== req.user.advisorId) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permisos para modificar este registro'
+        });
+      }
+    }
 
     // Actualizar registro
     updateData.updatedAt = new Date();
@@ -613,7 +649,7 @@ exports.deleteTableRecord = async (req, res) => {
     }
 
     // Verificar permisos
-    if (req.user.role !== 'admin' && req.user.clientId !== customTable.clientId) {
+    if (req.user.role !== 'admin' && req.user.role !== 'advisor' && req.user.clientId !== customTable.clientId) {
       return res.status(403).json({
         success: false,
         error: 'No tienes permisos para eliminar registros en esta tabla'
@@ -625,6 +661,24 @@ exports.deleteTableRecord = async (req, res) => {
       customTable.collectionName,
       customTable.getValidationSchema()
     );
+
+    // 🔑 NUEVO: Si es asesor, verificar que el registro le pertenece antes de eliminar
+    if (req.user.role === 'advisor') {
+      const existingRecord = await DataModel.findById(recordId);
+      if (!existingRecord) {
+        return res.status(404).json({
+          success: false,
+          error: 'Registro no encontrado'
+        });
+      }
+
+      if (existingRecord.assignedAdvisorId?.toString() !== req.user.advisorId) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permisos para eliminar este registro'
+        });
+      }
+    }
 
     // Eliminar registro
     const deletedRecord = await DataModel.findByIdAndDelete(recordId);

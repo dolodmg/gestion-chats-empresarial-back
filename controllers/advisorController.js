@@ -104,20 +104,50 @@ exports.createAdvisor = async (req, res) => {
             });
         }
 
+        if (!email || email.trim() === '') {
+            return res.status(400).json({
+                success: false,
+                error: 'El email es requerido'
+            });
+        }
+
+        // Verificar que el email no esté en uso
+        const existingAdvisor = await Advisor.findOne({ email: email.trim().toLowerCase() });
+        if (existingAdvisor) {
+            return res.status(400).json({
+                success: false,
+                error: 'El email ya está en uso'
+            });
+        }
+
+        // Generar contraseña aleatoria
+        const generatedPassword = generateRandomPassword(12);
+
         const advisor = new Advisor({
             clientId,
             name: name.trim(),
-            email: email || '',
+            email: email.trim().toLowerCase(),
+            password: generatedPassword, // Se hasheará automáticamente por el middleware pre-save
             phone: phone || '',
             active: true
         });
 
         await advisor.save();
 
+        // Retornar el asesor con la contraseña generada (solo esta vez)
         res.status(201).json({
             success: true,
             message: 'Asesor creado correctamente',
-            data: advisor
+            data: {
+                _id: advisor._id,
+                clientId: advisor.clientId,
+                name: advisor.name,
+                email: advisor.email,
+                phone: advisor.phone,
+                active: advisor.active,
+                createdAt: advisor.createdAt,
+                generatedPassword: generatedPassword // IMPORTANTE: Solo se muestra al crear
+            }
         });
     } catch (error) {
         console.error('Error creando asesor:', error);
@@ -127,6 +157,28 @@ exports.createAdvisor = async (req, res) => {
         });
     }
 };
+
+/**
+ * Genera una contraseña aleatoria segura
+ */
+function generateRandomPassword(length = 12) {
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let password = '';
+
+    // Asegurar al menos un carácter de cada tipo
+    password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]; // Mayúscula
+    password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]; // Minúscula
+    password += '0123456789'[Math.floor(Math.random() * 10)]; // Número
+    password += '!@#$%^&*'[Math.floor(Math.random() * 8)]; // Especial
+
+    // Completar el resto
+    for (let i = password.length; i < length; i++) {
+        password += charset[Math.floor(Math.random() * charset.length)];
+    }
+
+    // Mezclar los caracteres
+    return password.split('').sort(() => Math.random() - 0.5).join('');
+}
 
 /**
  * PUT /api/advisors/:id

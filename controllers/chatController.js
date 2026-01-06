@@ -8,9 +8,15 @@ const sseService = require('../services/sseService');
 // ⚡ OPTIMIZADO - Obtener todos los chats de un cliente con paginación
 exports.getChats = async (req, res) => {
   try {
-    const clientId = req.user.role === 'admin'
-      ? req.query.clientId
-      : req.user.clientId;
+    // Determinar clientId según el rol
+    let clientId;
+    if (req.user.role === 'admin') {
+      clientId = req.query.clientId;
+    } else if (req.user.role === 'advisor') {
+      clientId = req.user.clientId;
+    } else {
+      clientId = req.user.clientId;
+    }
 
     if (!clientId) {
       return res.status(400).json({ msg: 'Se requiere clientId' });
@@ -19,7 +25,7 @@ exports.getChats = async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = parseInt(req.query.skip) || 0;
 
-    console.log('Buscando chats para clientId:', clientId, `(limit: ${limit}, skip: ${skip})`);
+    console.log('Buscando chats para clientId:', clientId, `(limit: ${limit}, skip: ${skip}), role: ${req.user.role}`);
 
     // Primera parte: agregación de mensajes (igual que antes)
     const chats = await Message.aggregate([
@@ -88,10 +94,20 @@ exports.getChats = async (req, res) => {
 
     // Obtener el estado Y TAGS de cada chat desde la colección Chat
     const chatIds = chats.map(chat => chat.chatId);
-    const chatStatuses = await Chat.find({
+
+    // Construir query para Chat según el rol
+    const chatQuery = {
       chatId: { $in: chatIds },
       clientId
-    }).select('chatId chatStatus statusChangeTime tags assignedAdvisorName').lean();
+    };
+
+    // Si es asesor, filtrar solo chats asignados a él
+    if (req.user.role === 'advisor') {
+      chatQuery.assignedAdvisorId = req.user.advisorId;
+    }
+
+    const chatStatuses = await Chat.find(chatQuery)
+      .select('chatId chatStatus statusChangeTime tags assignedAdvisorName assignedAdvisorId').lean();
 
     // Crear un mapa de estados de chat para búsqueda rápida
     const statusMap = {};
@@ -125,8 +141,15 @@ exports.getChats = async (req, res) => {
       console.log(`${chatsToUpdate.length} chats actualizados a modo bot por timeout`);
     }
 
+    // Filtrar chats según el rol (para asesores, solo mostrar los que tienen estado)
+    let filteredChats = chats;
+    if (req.user.role === 'advisor') {
+      // Solo incluir chats que existen en statusMap (es decir, que están asignados al asesor)
+      filteredChats = chats.filter(chat => statusMap[chat.chatId]);
+    }
+
     // Añadir la información de estado Y TAGS a cada chat
-    const enrichedChats = chats.map(chat => ({
+    const enrichedChats = filteredChats.map(chat => ({
       ...chat,
       chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
       statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
@@ -155,7 +178,7 @@ exports.getChat = async (req, res) => {
       return res.status(400).json({ msg: 'Se requiere clientId' });
     }
 
-    console.log(`Buscando mensajes para chatId: ${chatId}, clientId: ${clientId}`);
+    console.log(`Buscando mensajes para chatId: ${chatId}, clientId: ${clientId}, role: ${req.user.role}`);
 
     // Obtener mensajes del chat, filtrando mensajes con campos completos
     const messages = await Message.find({
@@ -202,6 +225,15 @@ exports.getChat = async (req, res) => {
         chatStatus: 'bot' // Por defecto, el chat es manejado por el bot
       });
       await chat.save();
+    }
+
+    // 🔒 VERIFICACIÓN DE AUTORIZACIÓN PARA ASESORES
+    if (req.user.role === 'advisor') {
+      // Verificar que el chat esté asignado a este asesor
+      if (!chat.assignedAdvisorId || chat.assignedAdvisorId.toString() !== req.user.advisorId) {
+        console.log(`Asesor ${req.user.advisorId} intentó acceder a chat no asignado: ${chatId}`);
+        return res.status(403).json({ msg: 'No tienes permiso para acceder a este chat' });
+      }
     }
 
     // Verificar si el temporizador de 30 minutos ha expirado
@@ -254,7 +286,7 @@ exports.changeChatStatus = async (req, res) => {
       ? req.query.clientId || req.body.clientId  // Aceptar clientId de query o body
       : req.user.clientId;
 
-    console.log(`Recibida solicitud para cambiar estado: chatId=${chatId}, status=${status}, clientId=${clientId}`);
+    console.log(`Recibida solicitud para cambiar estado: chatId=${chatId}, status=${status}, clientId=${clientId}, role=${req.user.role}`);
 
     if (!clientId) {
       return res.status(400).json({ msg: 'Se requiere clientId' });
@@ -303,6 +335,15 @@ exports.changeChatStatus = async (req, res) => {
         lastMessage: '',
         lastMessageTimestamp: new Date()
       });
+    }
+
+    // 🔒 VERIFICACIÓN DE AUTORIZACIÓN PARA ASESORES
+    if (req.user.role === 'advisor') {
+      // Verificar que el chat esté asignado a este asesor
+      if (!chat.assignedAdvisorId || chat.assignedAdvisorId.toString() !== req.user.advisorId) {
+        console.log(`Asesor ${req.user.advisorId} intentó cambiar estado de chat no asignado: ${chatId}`);
+        return res.status(403).json({ msg: 'No tienes permiso para modificar este chat' });
+      }
     }
 
     // Actualizar el estado en Chat
@@ -385,6 +426,15 @@ exports.sendManualMessage = async (req, res) => {
 
     // Buscar datos del chat existente
     let chat = await Chat.findOne({ chatId, clientId });
+
+    // 🔒 VERIFICACIÓN DE AUTORIZACIÓN PARA ASESORES
+    if (req.user.role === 'advisor') {
+      // Verificar que el chat esté asignado a este asesor
+      if (!chat || !chat.assignedAdvisorId || chat.assignedAdvisorId.toString() !== req.user.advisorId) {
+        console.log(`Asesor ${req.user.advisorId} intentó enviar mensaje en chat no asignado: ${chatId}`);
+        return res.status(403).json({ msg: 'No tienes permiso para enviar mensajes en este chat' });
+      }
+    }
 
     // Verificar estado del chat
     const stateFromChatState = chatState && chatState.chatStatus === 'human';

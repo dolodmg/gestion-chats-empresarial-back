@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const Advisor = require('../models/Advisor');
 
 // Registro de usuario
 exports.register = async (req, res) => {
@@ -48,47 +49,87 @@ exports.register = async (req, res) => {
   }
 };
 
-// Login de usuario
+// Login de usuario o asesor
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Verificar si el usuario existe
-    const user = await User.findOne({ email });
+    // Primero buscar en User
+    let user = await User.findOne({ email });
+    let isAdvisor = false;
+    let advisor = null;
+
+    // Si no se encuentra en User, buscar en Advisor
     if (!user) {
-      return res.status(400).json({ msg: 'Credenciales inválidas' });
+      advisor = await Advisor.findOne({ email });
+      if (!advisor) {
+        return res.status(400).json({ msg: 'Credenciales inválidas' });
+      }
+      isAdvisor = true;
     }
 
     // Verificar contraseña
-    const isMatch = await bcrypt.compare(password, user.password);
+    const passwordToCompare = isAdvisor ? advisor.password : user.password;
+    const isMatch = await bcrypt.compare(password, passwordToCompare);
+
     if (!isMatch) {
       return res.status(400).json({ msg: 'Credenciales inválidas' });
     }
 
-    // Crear y enviar token JWT
-    const payload = {
-      user: {
+    // Verificar si el asesor está activo
+    if (isAdvisor && !advisor.active) {
+      return res.status(403).json({ msg: 'Cuenta de asesor desactivada. Contacte al administrador.' });
+    }
+
+    // Crear payload según el tipo de usuario
+    let payload, userResponse;
+
+    if (isAdvisor) {
+      payload = {
+        user: {
+          id: advisor.id,
+          role: 'advisor',
+          clientId: advisor.clientId,
+          advisorId: advisor.id
+        },
+      };
+
+      userResponse = {
+        id: advisor.id,
+        name: advisor.name,
+        email: advisor.email,
+        role: 'advisor',
+        clientId: advisor.clientId,
+        advisorId: advisor.id
+      };
+    } else {
+      payload = {
+        user: {
+          id: user.id,
+          role: user.role,
+          clientId: user.clientId,
+        },
+      };
+
+      userResponse = {
         id: user.id,
+        name: user.name,
+        email: user.email,
         role: user.role,
         clientId: user.clientId,
-      },
-    };
+      };
+    }
 
+    // Crear y enviar token JWT
     jwt.sign(
       payload,
       process.env.JWT_SECRET,
       { expiresIn: '7d' },
       (err, token) => {
         if (err) throw err;
-        res.json({ 
+        res.json({
           token,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            clientId: user.clientId,
-          }
+          user: userResponse
         });
       }
     );
