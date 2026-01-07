@@ -6,196 +6,196 @@ const nodemailer = require('nodemailer');
  */
 class EmailService {
 
-    constructor() {
-        // Configuración del transporter para Hostinger
-        this.transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-            port: parseInt(process.env.SMTP_PORT) || 587,
-            secure: process.env.SMTP_SECURE === 'true', // true para 465, false para 587
-            auth: {
-                user: process.env.EMAIL_USER, // Tu email empresarial
-                pass: process.env.EMAIL_PASSWORD // Contraseña de tu email
-            },
-            tls: {
-                rejectUnauthorized: false // Permite certificados autofirmados
-            },
-            // Configuraciones adicionales para Hostinger
-            connectionTimeout: 60000, // 60 segundos
-            greetingTimeout: 30000,    // 30 segundos
-            socketTimeout: 60000       // 60 segundos
-        });
+  constructor() {
+    // Configuración del transporter para Hostinger
+    this.transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+      port: parseInt(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true', // true para 465, false para 587
+      auth: {
+        user: process.env.EMAIL_USER, // Tu email empresarial
+        pass: process.env.EMAIL_PASSWORD // Contraseña de tu email
+      },
+      tls: {
+        rejectUnauthorized: false // Permite certificados autofirmados
+      },
+      // Configuraciones adicionales para Hostinger
+      connectionTimeout: 60000, // 60 segundos
+      greetingTimeout: 30000,    // 30 segundos
+      socketTimeout: 60000       // 60 segundos
+    });
 
-        // Emails destinatarios fijos
-        this.NOTIFICATION_EMAILS = [
-            'emirioslp@gmail.com',
-            'elisandrodanielsantos@gmail.com'
-        ];
+    // Emails destinatarios fijos
+    this.NOTIFICATION_EMAILS = [
+      'emirioslp@gmail.com',
+      'elisandrodanielsantos@gmail.com'
+    ];
 
-        console.log(`📧 Email Service configurado con:`);
-        console.log(`   - Host: ${process.env.SMTP_HOST || 'smtp.hostinger.com'}`);
-        console.log(`   - Puerto: ${process.env.SMTP_PORT || 587}`);
-        console.log(`   - Email: ${process.env.EMAIL_USER}`);
-        console.log(`   - Destinatarios: ${this.NOTIFICATION_EMAILS.join(', ')}`);
+    console.log(`📧 Email Service configurado con:`);
+    console.log(`   - Host: ${process.env.SMTP_HOST || 'smtp.hostinger.com'}`);
+    console.log(`   - Puerto: ${process.env.SMTP_PORT || 587}`);
+    console.log(`   - Email: ${process.env.EMAIL_USER}`);
+    console.log(`   - Destinatarios: ${this.NOTIFICATION_EMAILS.join(', ')}`);
+  }
+
+  /**
+   * Create transporter from email credential
+   */
+  createTransporterFromCredential(credential, plaintextPassword) {
+    return nodemailer.createTransport({
+      host: credential.host,
+      port: credential.port,
+      secure: credential.secure,
+      auth: {
+        user: credential.user,
+        pass: plaintextPassword
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 60000,
+      greetingTimeout: 30000,
+      socketTimeout: 60000
+    });
+  }
+
+  /**
+   * Verificar configuración del servicio de email
+   */
+  async verifyEmailConfig() {
+    try {
+      console.log('🔧 Verificando configuración de email empresarial...');
+
+      // Verificar conexión con timeout
+      const verified = await Promise.race([
+        this.transporter.verify(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout verificando email')), 15000)
+        )
+      ]);
+
+      if (verified) {
+        console.log('✅ Configuración de email empresarial verificada correctamente');
+        console.log(`✅ Conectado al servidor: ${process.env.SMTP_HOST || 'smtp.hostinger.com'}`);
+        return true;
+      }
+
+    } catch (error) {
+      console.error('❌ Error en configuración de email empresarial:', error.message);
+
+      // Mostrar ayuda específica según el tipo de error
+      if (error.code === 'EAUTH') {
+        console.error('💡 Problema de autenticación - Verifica email y contraseña');
+      } else if (error.code === 'ECONNECTION') {
+        console.error('💡 Problema de conexión - Verifica host y puerto SMTP');
+      } else if (error.code === 'ETIMEDOUT') {
+        console.error('💡 Timeout de conexión - Verifica configuración de red');
+      }
+
+      return false;
     }
+  }
 
-    /**
-     * Create transporter from email credential
-     */
-    createTransporterFromCredential(credential, plaintextPassword) {
-        return nodemailer.createTransport({
-            host: credential.host,
-            port: credential.port,
-            secure: credential.secure,
-            auth: {
-                user: credential.user,
-                pass: plaintextPassword
-            },
-            tls: {
-                rejectUnauthorized: false
-            },
-            connectionTimeout: 60000,
-            greetingTimeout: 30000,
-            socketTimeout: 60000
-        });
-    }
+  /**
+   * Enviar notificación de inactividad de mensajes
+   */
+  async sendInactivityAlert(lastMessage, timeDifference) {
+    try {
+      const minutesInactive = Math.round(timeDifference / (60 * 1000));
+      const hoursInactive = Math.round(minutesInactive / 60);
 
-    /**
-     * Verificar configuración del servicio de email
-     */
-    async verifyEmailConfig() {
-        try {
-            console.log('🔧 Verificando configuración de email empresarial...');
+      console.log(`📧 Preparando notificación de inactividad (${minutesInactive} min sin actividad)`);
 
-            // Verificar conexión con timeout
-            const verified = await Promise.race([
-                this.transporter.verify(),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout verificando email')), 15000)
-                )
-            ]);
+      // Generar contenido del email
+      const emailContent = this.generateInactivityEmailContent(lastMessage, minutesInactive, hoursInactive);
 
-            if (verified) {
-                console.log('✅ Configuración de email empresarial verificada correctamente');
-                console.log(`✅ Conectado al servidor: ${process.env.SMTP_HOST || 'smtp.hostinger.com'}`);
-                return true;
-            }
-
-        } catch (error) {
-            console.error('❌ Error en configuración de email empresarial:', error.message);
-
-            // Mostrar ayuda específica según el tipo de error
-            if (error.code === 'EAUTH') {
-                console.error('💡 Problema de autenticación - Verifica email y contraseña');
-            } else if (error.code === 'ECONNECTION') {
-                console.error('💡 Problema de conexión - Verifica host y puerto SMTP');
-            } else if (error.code === 'ETIMEDOUT') {
-                console.error('💡 Timeout de conexión - Verifica configuración de red');
-            }
-
-            return false;
+      // Configurar el email
+      const mailOptions = {
+        from: {
+          name: 'Sistema INTELIGENTE - Monitoreo WhatsApp',
+          address: process.env.EMAIL_USER
+        },
+        to: this.NOTIFICATION_EMAILS,
+        subject: `🚨 Alerta: Sin mensajes de WhatsApp por ${hoursInactive > 1 ? hoursInactive + ' horas' : minutesInactive + ' minutos'}`,
+        html: emailContent.html,
+        text: emailContent.text,
+        priority: 'high', // Marcar como alta prioridad
+        headers: {
+          'X-Mailer': 'Sistema INTELIGENTE v1.0',
+          'X-Priority': '1'
         }
+      };
+
+      console.log('📤 Enviando notificación de inactividad...');
+
+      // Enviar email con timeout
+      const info = await Promise.race([
+        this.transporter.sendMail(mailOptions),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout enviando email')), 30000)
+        )
+      ]);
+
+      console.log('✅ Notificación de inactividad enviada correctamente');
+      console.log(`📧 Message ID: ${info.messageId}`);
+      console.log(`📧 Emails enviados a: ${this.NOTIFICATION_EMAILS.join(', ')}`);
+
+      return {
+        success: true,
+        messageId: info.messageId,
+        recipients: this.NOTIFICATION_EMAILS,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('❌ Error enviando notificación de inactividad:', error.message);
+
+      // Log adicional para debugging
+      if (error.code) {
+        console.error(`   - Código de error: ${error.code}`);
+      }
+      if (error.response) {
+        console.error(`   - Respuesta del servidor: ${error.response}`);
+      }
+
+      return {
+        success: false,
+        error: error.message,
+        code: error.code,
+        timestamp: new Date().toISOString()
+      };
     }
+  }
 
-    /**
-     * Enviar notificación de inactividad de mensajes
-     */
-    async sendInactivityAlert(lastMessage, timeDifference) {
-        try {
-            const minutesInactive = Math.round(timeDifference / (60 * 1000));
-            const hoursInactive = Math.round(minutesInactive / 60);
+  /**
+   * Generar contenido HTML y texto del email de inactividad
+   */
+  generateInactivityEmailContent(lastMessage, minutesInactive, hoursInactive) {
+    const lastMessageTime = new Date(lastMessage.timestamp).toLocaleString('es-ES', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
 
-            console.log(`📧 Preparando notificación de inactividad (${minutesInactive} min sin actividad)`);
+    const timeDisplay = hoursInactive > 1
+      ? `${hoursInactive} horas y ${minutesInactive % 60} minutos`
+      : `${minutesInactive} minutos`;
 
-            // Generar contenido del email
-            const emailContent = this.generateInactivityEmailContent(lastMessage, minutesInactive, hoursInactive);
+    const currentTime = new Date().toLocaleString('es-ES', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
 
-            // Configurar el email
-            const mailOptions = {
-                from: {
-                    name: 'Sistema INTELIGENTE - Monitoreo WhatsApp',
-                    address: process.env.EMAIL_USER
-                },
-                to: this.NOTIFICATION_EMAILS,
-                subject: `🚨 Alerta: Sin mensajes de WhatsApp por ${hoursInactive > 1 ? hoursInactive + ' horas' : minutesInactive + ' minutos'}`,
-                html: emailContent.html,
-                text: emailContent.text,
-                priority: 'high', // Marcar como alta prioridad
-                headers: {
-                    'X-Mailer': 'Sistema INTELIGENTE v1.0',
-                    'X-Priority': '1'
-                }
-            };
-
-            console.log('📤 Enviando notificación de inactividad...');
-
-            // Enviar email con timeout
-            const info = await Promise.race([
-                this.transporter.sendMail(mailOptions),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout enviando email')), 30000)
-                )
-            ]);
-
-            console.log('✅ Notificación de inactividad enviada correctamente');
-            console.log(`📧 Message ID: ${info.messageId}`);
-            console.log(`📧 Emails enviados a: ${this.NOTIFICATION_EMAILS.join(', ')}`);
-
-            return {
-                success: true,
-                messageId: info.messageId,
-                recipients: this.NOTIFICATION_EMAILS,
-                timestamp: new Date().toISOString()
-            };
-
-        } catch (error) {
-            console.error('❌ Error enviando notificación de inactividad:', error.message);
-
-            // Log adicional para debugging
-            if (error.code) {
-                console.error(`   - Código de error: ${error.code}`);
-            }
-            if (error.response) {
-                console.error(`   - Respuesta del servidor: ${error.response}`);
-            }
-
-            return {
-                success: false,
-                error: error.message,
-                code: error.code,
-                timestamp: new Date().toISOString()
-            };
-        }
-    }
-
-    /**
-     * Generar contenido HTML y texto del email de inactividad
-     */
-    generateInactivityEmailContent(lastMessage, minutesInactive, hoursInactive) {
-        const lastMessageTime = new Date(lastMessage.timestamp).toLocaleString('es-ES', {
-            timeZone: 'America/Argentina/Buenos_Aires',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-
-        const timeDisplay = hoursInactive > 1
-            ? `${hoursInactive} horas y ${minutesInactive % 60} minutos`
-            : `${minutesInactive} minutos`;
-
-        const currentTime = new Date().toLocaleString('es-ES', {
-            timeZone: 'America/Argentina/Buenos_Aires',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-
-        const html = `
+    const html = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -400,7 +400,7 @@ class EmailService {
       </html>
     `;
 
-        const text = `
+    const text = `
 🚨 ALERTA DE INACTIVIDAD - WhatsApp
 
 Sin actividad detectada en los últimos ${timeDisplay}.
@@ -430,28 +430,28 @@ Sistema INTELIGENTE - Monitoreo Automático
 Esta es una notificación automática del sistema de monitoreo
     `;
 
-        return { html, text };
-    }
+    return { html, text };
+  }
 
-    /**
-     * Enviar email de prueba para verificar funcionamiento
-     */
-    async sendTestEmail() {
-        try {
-            console.log('📧 Preparando email de prueba...');
+  /**
+   * Enviar email de prueba para verificar funcionamiento
+   */
+  async sendTestEmail() {
+    try {
+      console.log('📧 Preparando email de prueba...');
 
-            const currentTime = new Date().toLocaleString('es-ES', {
-                timeZone: 'America/Argentina/Buenos_Aires'
-            });
+      const currentTime = new Date().toLocaleString('es-ES', {
+        timeZone: 'America/Argentina/Buenos_Aires'
+      });
 
-            const mailOptions = {
-                from: {
-                    name: 'Sistema INTELIGENTE - Prueba',
-                    address: process.env.EMAIL_USER
-                },
-                to: this.NOTIFICATION_EMAILS,
-                subject: '✅ Prueba - Sistema de Notificaciones WhatsApp',
-                html: `
+      const mailOptions = {
+        from: {
+          name: 'Sistema INTELIGENTE - Prueba',
+          address: process.env.EMAIL_USER
+        },
+        to: this.NOTIFICATION_EMAILS,
+        subject: '✅ Prueba - Sistema de Notificaciones WhatsApp',
+        html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
             <div style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 30px; text-align: center;">
               <h2 style="margin: 0; font-size: 24px;">✅ Prueba del Sistema de Notificaciones</h2>
@@ -483,7 +483,7 @@ Esta es una notificación automática del sistema de monitoreo
             </div>
           </div>
         `,
-                text: `
+        text: `
 ✅ Prueba del Sistema de Notificaciones
 
 Este es un email de prueba para verificar que el sistema de notificaciones funciona correctamente.
@@ -503,110 +503,123 @@ ESTADO DEL SISTEMA:
 ---
 Sistema INTELIGENTE v1.0 - Monitoreo Automático de WhatsApp
         `,
-                priority: 'normal'
-            };
+        priority: 'normal'
+      };
 
-            console.log('📤 Enviando email de prueba...');
+      console.log('📤 Enviando email de prueba...');
 
-            const info = await Promise.race([
-                this.transporter.sendMail(mailOptions),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout enviando email de prueba')), 30000)
-                )
-            ]);
+      const info = await Promise.race([
+        this.transporter.sendMail(mailOptions),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout enviando email de prueba')), 30000)
+        )
+      ]);
 
-            console.log('✅ Email de prueba enviado correctamente');
-            console.log(`📧 Message ID: ${info.messageId}`);
-            console.log(`📧 Destinatarios: ${this.NOTIFICATION_EMAILS.join(', ')}`);
+      console.log('✅ Email de prueba enviado correctamente');
+      console.log(`📧 Message ID: ${info.messageId}`);
+      console.log(`📧 Destinatarios: ${this.NOTIFICATION_EMAILS.join(', ')}`);
 
-            return {
-                success: true,
-                messageId: info.messageId,
-                recipients: this.NOTIFICATION_EMAILS,
-                timestamp: new Date().toISOString()
-            };
+      return {
+        success: true,
+        messageId: info.messageId,
+        recipients: this.NOTIFICATION_EMAILS,
+        timestamp: new Date().toISOString()
+      };
 
-        } catch (error) {
-            console.error('❌ Error enviando email de prueba:', error.message);
-            return {
-                success: false,
-                error: error.message,
-                timestamp: new Date().toISOString()
-            };
+    } catch (error) {
+      console.error('❌ Error enviando email de prueba:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Enviar email de campaña publicitaria
+   */
+  async sendCampaignEmail({ to, subject, html, text, recipientName, transporter, fromName, fromEmail, campaignId, recipientId }) {
+    try {
+      // Use custom transporter if provided
+      const emailTransporter = transporter || this.transporter;
+      const senderName = fromName || process.env.EMAIL_FROM_NAME || 'Campañas';
+      const senderEmail = fromEmail || process.env.EMAIL_USER;
+
+      const mailOptions = {
+        from: {
+          name: senderName,
+          address: senderEmail
+        },
+        to: to,
+        subject: subject,
+        html: html,
+        text: text || html.replace(/<[^>]*>/g, ''),
+        headers: {
+          'X-Mailer': 'Sistema INTELIGENTE - Campañas v1.0'
         }
-    }
+      };
 
-    /**
-     * Enviar email de campaña publicitaria
-     */
-    async sendCampaignEmail({ to, subject, html, text, recipientName, transporter, fromName, fromEmail }) {
-        try {
-            // Use custom transporter if provided
-            const emailTransporter = transporter || this.transporter;
-            const senderName = fromName || process.env.EMAIL_FROM_NAME || 'Campañas';
-            const senderEmail = fromEmail || process.env.EMAIL_USER;
+      // Personalizar contenido si hay nombre del destinatario
+      if (recipientName) {
+        mailOptions.html = mailOptions.html.replace(/\{\{nombre\}\}/gi, recipientName);
+        mailOptions.text = mailOptions.text.replace(/\{\{nombre\}\}/gi, recipientName);
+      }
 
-            const mailOptions = {
-                from: {
-                    name: senderName,
-                    address: senderEmail
-                },
-                to: to,
-                subject: subject,
-                html: html,
-                text: text || html.replace(/<[^>]*>/g, ''),
-                headers: {
-                    'X-Mailer': 'Sistema INTELIGENTE - Campañas v1.0'
-                }
-            };
+      // Inject tracking pixel if campaignId and recipientId are provided
+      if (campaignId && recipientId) {
+        const trackingPixelUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/api/track/open/${campaignId}/${recipientId}`;
+        const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
 
-            // Personalizar contenido si hay nombre del destinatario
-            if (recipientName) {
-                mailOptions.html = mailOptions.html.replace(/\{\{nombre\}\}/gi, recipientName);
-                mailOptions.text = mailOptions.text.replace(/\{\{nombre\}\}/gi, recipientName);
-            }
-
-            const info = await Promise.race([
-                emailTransporter.sendMail(mailOptions),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout enviando email de campaña')), 30000)
-                )
-            ]);
-
-            return {
-                success: true,
-                messageId: info.messageId,
-                recipient: to,
-                timestamp: new Date().toISOString()
-            };
-
-        } catch (error) {
-            console.error(`❌ Error enviando email de campaña a ${to}:`, error.message);
-            throw error;
+        // Inject pixel before closing body tag, or at the end if no body tag
+        if (mailOptions.html.includes('</body>')) {
+          mailOptions.html = mailOptions.html.replace('</body>', `${trackingPixel}</body>`);
+        } else {
+          mailOptions.html += trackingPixel;
         }
+      }
+
+      const info = await Promise.race([
+        emailTransporter.sendMail(mailOptions),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout enviando email de campaña')), 30000)
+        )
+      ]);
+
+      return {
+        success: true,
+        messageId: info.messageId,
+        recipient: to,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error(`❌ Error enviando email de campaña a ${to}:`, error.message);
+      throw error;
     }
+  }
 
-    /**
-     * Validar lista de emails
-     */
-    validateEmailList(emails) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const results = {
-            valid: [],
-            invalid: []
-        };
+  /**
+   * Validar lista de emails
+   */
+  validateEmailList(emails) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const results = {
+      valid: [],
+      invalid: []
+    };
 
-        emails.forEach(email => {
-            const trimmedEmail = email.trim().toLowerCase();
-            if (emailRegex.test(trimmedEmail)) {
-                results.valid.push(trimmedEmail);
-            } else {
-                results.invalid.push(email);
-            }
-        });
+    emails.forEach(email => {
+      const trimmedEmail = email.trim().toLowerCase();
+      if (emailRegex.test(trimmedEmail)) {
+        results.valid.push(trimmedEmail);
+      } else {
+        results.invalid.push(email);
+      }
+    });
 
-        return results;
-    }
+    return results;
+  }
 }
 
 module.exports = EmailService;

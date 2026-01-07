@@ -4,7 +4,7 @@ const AssistantPrompt = require('../models/AssistantPrompt');
 const Message = require('../models/Message');
 const Chat = require('../models/Chat');
 const ImprovementSuggestion = require('../models/ImprovementSuggestion');
-const FAQ = require('../models/FAQ'); 
+const FAQ = require('../models/FAQ');
 
 dotenv.config();
 
@@ -23,7 +23,7 @@ function cleanWorkflowForUpdate(workflow) {
   // Settings: solo campos permitidos por n8n API
   const allowedSettingsFields = [
     'saveExecutionProgress',
-    'saveManualExecutions', 
+    'saveManualExecutions',
     'saveDataErrorExecution',
     'saveDataSuccessExecution',
     'executionTimeout',
@@ -71,7 +71,7 @@ function findAssistantNode(workflow) {
 
   // Manejar tanto arrays como objetos
   let nodesToSearch = [];
-  
+
   if (Array.isArray(workflow.nodes)) {
     nodesToSearch = workflow.nodes.map(node => ({
       ...node,
@@ -105,9 +105,9 @@ function findAssistantNode(workflow) {
   // Buscar el nodo del asistente
   for (const node of nodesToSearch) {
     // Criterio 1: Nodo de tipo langchain.agent con systemMessage
-    if (node.type === '@n8n/n8n-nodes-langchain.agent' && 
-        node.parameters?.options?.systemMessage) {
-      
+    if (node.type === '@n8n/n8n-nodes-langchain.agent' &&
+      node.parameters?.options?.systemMessage) {
+
       console.log('✅ ENCONTRADO por criterio 1 (langchain.agent):', node.nodeId);
       return {
         nodeId: node.nodeId,
@@ -115,12 +115,12 @@ function findAssistantNode(workflow) {
         promptText: node.parameters.options.systemMessage
       };
     }
-    
+
     // Criterio 2: Buscar por nombre que contenga "asistente"
-    if (node.name && 
-        node.name.toLowerCase().includes('asistente') && 
-        node.parameters?.options?.systemMessage) {
-      
+    if (node.name &&
+      node.name.toLowerCase().includes('asistente') &&
+      node.parameters?.options?.systemMessage) {
+
       console.log('✅ ENCONTRADO por criterio 2 (nombre con asistente):', node.nodeId);
       return {
         nodeId: node.nodeId,
@@ -129,7 +129,7 @@ function findAssistantNode(workflow) {
       };
     }
   }
-  
+
   console.log('❌ NO se encontró el nodo del asistente');
   console.log('=================================');
   return null;
@@ -158,7 +158,7 @@ function updateNodePrompt(node, newPrompt) {
  */
 async function getWorkflowIdForClient(clientId) {
   const User = require('../models/User');
-  
+
   try {
     const user = await User.findOne({ clientId }).select('workflowId');
     if (user && user.workflowId) {
@@ -168,7 +168,7 @@ async function getWorkflowIdForClient(clientId) {
   } catch (error) {
     console.log('Error al buscar usuario:', error.message);
   }
-  
+
   return null;
 }
 
@@ -188,38 +188,38 @@ function debugSettings(workflow) {
 
 async function callAI(prompt) {
   try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini', 
-          messages: [
-            {
-              role: 'system',
-              content: 'Eres un experto Auditor de Calidad de Chatbots. Respondes ÚNICAMENTE en formato JSON válido.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3, 
-          response_format: { type: "json_object" }
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres un experto Auditor de Calidad de Chatbots. Respondes ÚNICAMENTE en formato JSON válido.'
+          },
+          {
+            role: 'user',
+            content: prompt
           }
+        ],
+        temperature: 0.3,
+        response_format: { type: "json_object" }
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         }
-      );
+      }
+    );
 
-      const content = response.data.choices[0].message.content;
-      return JSON.parse(content);
-    } catch (error) {
-      console.error('Error llamando a OpenAI:', error.response?.data || error.message);
-      throw new Error('Falló el análisis de IA');
-    }
+    const content = response.data.choices[0].message.content;
+    return JSON.parse(content);
+  } catch (error) {
+    console.error('Error llamando a OpenAI:', error.response?.data || error.message);
+    throw new Error('Falló el análisis de IA');
   }
+}
 
 
 /**
@@ -232,18 +232,18 @@ exports.getAssistantPrompt = async (req, res) => {
       : req.user.clientId;
 
     if (!clientId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Se requiere clientId' 
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere clientId'
       });
     }
 
     console.log(`Obteniendo prompt del asistente para clientId: ${clientId}`);
 
     // 1. Buscar en BD primero (caché)
-    const savedPrompt = await AssistantPrompt.findOne({ 
-      clientId, 
-      isActive: true 
+    const savedPrompt = await AssistantPrompt.findOne({
+      clientId,
+      isActive: true
     }).sort({ createdAt: -1 });
 
     if (savedPrompt) {
@@ -260,14 +260,14 @@ exports.getAssistantPrompt = async (req, res) => {
 
     // 2. Si no hay en BD, obtener workflowId del usuario
     const workflowId = await getWorkflowIdForClient(clientId);
-    
+
     if (!workflowId) {
       return res.status(404).json({
         success: false,
         error: 'No se encontró workflowId para este cliente'
       });
     }
-    
+
     // 3. Hacer GET a n8n para obtener el workflow
     const workflowResponse = await axios.get(`${N8N_API_URL}/workflows/${workflowId}`, {
       headers: {
@@ -353,9 +353,9 @@ exports.updateAssistantPrompt = async (req, res) => {
     let workflowId, nodeId;
 
     // 1. Buscar workflowId y nodeId en BD primero
-    const currentPrompt = await AssistantPrompt.findOne({ 
-      clientId, 
-      isActive: true 
+    const currentPrompt = await AssistantPrompt.findOne({
+      clientId,
+      isActive: true
     }).sort({ createdAt: -1 });
 
     if (currentPrompt) {
@@ -364,7 +364,7 @@ exports.updateAssistantPrompt = async (req, res) => {
     } else {
       // Si no hay en BD, obtener workflowId del usuario
       workflowId = await getWorkflowIdForClient(clientId);
-      
+
       if (!workflowId) {
         return res.status(404).json({
           success: false,
@@ -405,17 +405,17 @@ exports.updateAssistantPrompt = async (req, res) => {
     }
 
     const workflow = getResponse.data;
-    
+
     // 3. Encontrar y actualizar el prompt en el nodo correcto
     let promptUpdated = false;
-    
+
     if (Array.isArray(workflow.nodes)) {
       // Si nodes es array, buscar por id
-      const nodeIndex = workflow.nodes.findIndex(node => 
-        node.type === '@n8n/n8n-nodes-langchain.agent' && 
+      const nodeIndex = workflow.nodes.findIndex(node =>
+        node.type === '@n8n/n8n-nodes-langchain.agent' &&
         node.parameters?.options?.systemMessage
       );
-      
+
       if (nodeIndex !== -1) {
         workflow.nodes[nodeIndex].parameters.options.systemMessage = prompt;
         nodeId = workflow.nodes[nodeIndex].id;
@@ -424,8 +424,8 @@ exports.updateAssistantPrompt = async (req, res) => {
     } else {
       // Si nodes es objeto, buscar en todos los nodos
       for (const [id, node] of Object.entries(workflow.nodes)) {
-        if (node.type === '@n8n/n8n-nodes-langchain.agent' && 
-            node.parameters?.options?.systemMessage) {
+        if (node.type === '@n8n/n8n-nodes-langchain.agent' &&
+          node.parameters?.options?.systemMessage) {
           node.parameters.options.systemMessage = prompt;
           nodeId = id;
           promptUpdated = true;
@@ -443,7 +443,7 @@ exports.updateAssistantPrompt = async (req, res) => {
 
     // 4. Crear objeto simple para PUT
     const cleanedWorkflow = cleanWorkflowForUpdate(workflow);
-    
+
     // DEBUG: Ver JSON que se enviará
     console.log('=== JSON QUE SE ENVIARÁ A N8N ===');
     console.log(JSON.stringify(cleanedWorkflow, null, 2));
@@ -495,12 +495,12 @@ exports.updateAssistantPrompt = async (req, res) => {
   } catch (error) {
     console.error('💥 ERROR EN updateAssistantPrompt:');
     console.error('Message:', error.message);
-    
+
     if (error.response) {
       console.error('Status:', error.response.status);
       console.error('Response data:', JSON.stringify(error.response.data, null, 2));
     }
-    
+
     res.status(500).json({
       success: false,
       error: 'Error del servidor al actualizar el prompt',
@@ -520,9 +520,9 @@ exports.getPromptHistory = async (req, res) => {
       : req.user.clientId;
 
     if (!clientId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Se requiere clientId' 
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere clientId'
       });
     }
 
@@ -608,8 +608,8 @@ exports.restorePrompt = async (req, res) => {
     });
   }
 };
-    
-  exports.generateImprovements = async (req, res) => {
+
+exports.generateImprovements = async (req, res) => {
   try {
     const clientId = req.user.role === 'admin'
       ? req.query.clientId
@@ -637,14 +637,14 @@ exports.restorePrompt = async (req, res) => {
     for (const chat of recentChats) {
       const msgs = await Message.find({ chatId: chat.chatId })
         .sort({ timestamp: 1 })
-        .limit(15); 
-      
-      if (msgs.length < 2) continue; 
+        .limit(15);
+
+      if (msgs.length < 2) continue;
 
       transcript += `\n--- CHAT ${chat.chatId.substring(0, 4)} ---\n`;
       msgs.forEach(m => {
         const role = m.sender === 'user' ? 'USUARIO' : 'BOT';
-        const content = m.content ? m.content.replace(/\n/g, ' ').substring(0, 200) : ''; 
+        const content = m.content ? m.content.replace(/\n/g, ' ').substring(0, 200) : '';
         transcript += `${role}: ${content}\n`;
       });
     }
@@ -654,29 +654,87 @@ exports.restorePrompt = async (req, res) => {
     }
 
     // 4. Prompt Auditor
-    const auditorPrompt = `Analiza el desempeño del bot.
-CONTEXTO:
+    const auditorPrompt = `Analiza el desempeño del bot como auditor de calidad.
+
+CONTEXTO DEL BOT:
 """
 ${currentSystemMessage.substring(0, 3000)}
 """
-CHATS:
+
+CONVERSACIONES RECIENTES:
 """
 ${transcript.substring(0, 15000)}
 """
-TAREA: Detectar fallas.
-CASOS:
-1. KNOWLEDGE_GAP (Bot no sabe responder).
-2. ESCALATION (Piden humano/Enojo).
-3. SENTIMENT (Quejas).
 
-SALIDA JSON:
-Devuelve un objeto JSON con una propiedad "suggestions" que contenga el array de problemas detectados.
-Ejemplo:
+TAREA: Identifica PATRONES RECURRENTES que representan problemas reales.
+
+REGLAS IMPORTANTES:
+- NO menciones números de chat (ej: "En el chat 1786...")
+- SÍ describe situaciones específicas que se repiten (ej: "Varios usuarios cancelan citas por emergencias familiares y el bot no sabe cómo ayudarlos")
+- Solo reporta problemas que veas en MÚLTIPLES conversaciones
+- Sé específico sobre QUÉ pregunta el usuario y QUÉ falla el bot
+- Enfócate en lo ACCIONABLE: qué información falta o qué debe mejorar
+
+CATEGORÍAS DE PROBLEMAS:
+
+1. KNOWLEDGE_GAP (Gaps de conocimiento)
+   - El bot no sabe responder preguntas específicas que se repiten
+   - Falta información en la base de conocimiento
+   - El bot da respuestas vagas cuando debería ser específico
+   Ejemplo: "Usuarios preguntan sobre el costo de servicios adicionales, pero el bot no tiene esta información y deriva a humano"
+
+2. ESCALATION (Derivaciones a humano)
+   - Usuarios piden hablar con una persona repetidamente
+   - Expresan frustración con las respuestas del bot
+   - Solicitan ayuda que el bot no puede proporcionar
+   Ejemplo: "Clientes con problemas de facturación piden hablar con un humano porque el bot no puede resolver estos casos"
+
+3. SENTIMENT (Sentimiento negativo)
+   - Quejas recurrentes sobre el servicio
+   - Frustración o enojo en múltiples conversaciones
+   - Insatisfacción con las respuestas del bot
+   Ejemplo: "Usuarios expresan frustración porque el bot tarda mucho en responder o da respuestas que no resuelven su problema"
+
+CRITERIOS DE SEVERIDAD:
+
+ALTA (high):
+- El problema afecta a MÁS DEL 25% de las conversaciones analizadas
+- Causa derivación a humano o pérdida de clientes
+- Impacta negativamente la experiencia del usuario de forma significativa
+- Requiere acción inmediata
+Ejemplo: "El bot no puede procesar pagos y deriva todos los casos a humano"
+
+MEDIA (medium):
+- El problema afecta al 10-25% de las conversaciones
+- Causa frustración pero no pérdida de clientes
+- El bot puede dar una respuesta parcial pero incompleta
+- Debería resolverse pronto
+Ejemplo: "El bot no conoce los horarios de atención de sucursales específicas"
+
+BAJA (low):
+- El problema afecta al 5-10% de las conversaciones
+- Causa molestia menor o confusión temporal
+- El usuario puede encontrar la respuesta de otra forma
+- Puede resolverse cuando haya tiempo
+Ejemplo: "El bot no entiende algunas formas coloquiales de preguntar lo mismo"
+
+NOTA: Si el problema aparece en menos del 5% de conversaciones, probablemente no es un patrón significativo.
+
+FORMATO DE SALIDA (JSON):
 {
   "suggestions": [
-    {"type": "knowledge_gap", "title": "...", "description": "...", "severity": "high"}
+    {
+      "type": "knowledge_gap",
+      "title": "Falta información sobre cancelación de citas",
+      "description": "Varios usuarios preguntan cómo cancelar o reprogramar citas por emergencias, pero el bot no tiene esta información. Esto genera frustración y deriva a humano en la mayoría de casos.",
+      "severity": "high"
+    }
   ]
-}`;
+}
+
+IMPORTANTE: Solo incluye problemas que veas en AL MENOS 2-3 conversaciones diferentes.`;
+
+
 
     // 5. Llamar a IA
     console.log('[DEBUG] Llamando a OpenAI...');
@@ -711,17 +769,17 @@ Ejemplo:
     if (Array.isArray(suggestionsData)) {
       for (const sugg of suggestionsData) {
         const type = sugg.type ? sugg.type.toLowerCase() : '';
-        
+
         if (['knowledge_gap', 'escalation', 'sentiment'].includes(type)) {
-            const newSugg = await ImprovementSuggestion.create({
-              clientId,
-              type: type,
-              title: sugg.title,
-              description: sugg.description,
-              severity: sugg.severity || 'medium',
-              status: 'pending'
-            });
-            savedSuggestions.push(newSugg);
+          const newSugg = await ImprovementSuggestion.create({
+            clientId,
+            type: type,
+            title: sugg.title,
+            description: sugg.description,
+            severity: sugg.severity || 'medium',
+            status: 'pending'
+          });
+          savedSuggestions.push(newSugg);
         }
       }
     }
@@ -746,30 +804,68 @@ exports.getImprovements = async (req, res) => {
       ? req.query.clientId
       : req.user.clientId;
 
-      const suggestions = await ImprovementSuggestion.find({ clientId, status: 'pending' })
-        .sort({ severity: -1, createdAt: -1 }); 
+    const suggestions = await ImprovementSuggestion.find({ clientId, status: 'pending' })
+      .sort({ severity: -1, createdAt: -1 });
 
-      res.json({ success: true, suggestions });
-    } catch (error) {
-      console.error('Error obteniendo mejoras:', error);
-      res.status(500).json({ success: false, error: 'Error al obtener mejoras' });
-    }
+    res.json({ success: true, suggestions });
+  } catch (error) {
+    console.error('Error obteniendo mejoras:', error);
+    res.status(500).json({ success: false, error: 'Error al obtener mejoras' });
+  }
 };
 
 exports.getAnalytics = async (req, res) => {
   try {
     const clientId = req.user.role === 'admin' ? req.query.clientId : req.user.clientId;
-    
+
     // Rango: Últimos 7 días
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 7);
 
     console.log(`📊 Analytics reales para ${clientId}`);
+    console.log(`📅 Rango de fechas: ${startDate.toISOString()} a ${endDate.toISOString()}`);
+
+    // DEBUG: Ver cuántos mensajes hay en total para este cliente (sin filtro de fecha)
+    const totalMessagesForClient = await Message.countDocuments({ clientId });
+    console.log(`📝 Total mensajes en BD para clientId ${clientId}: ${totalMessagesForClient}`);
+
+    // DEBUG: Ver un mensaje de muestra para entender la estructura
+    const sampleMessage = await Message.findOne({ clientId }).lean();
+    if (sampleMessage) {
+      console.log(`📋 Mensaje de muestra:`, {
+        _id: sampleMessage._id,
+        chatId: sampleMessage.chatId,
+        clientId: sampleMessage.clientId,
+        sender: sampleMessage.sender,
+        timestamp: sampleMessage.timestamp,
+        hasContent: !!sampleMessage.content
+      });
+    } else {
+      console.log(`⚠️ No se encontró ningún mensaje para clientId: ${clientId}`);
+    }
+
+    // DEBUG: Ver cuántos mensajes hay en el rango de fechas
+    const messagesInRange = await Message.countDocuments({
+      clientId,
+      timestamp: { $gte: startDate, $lte: endDate }
+    });
+    console.log(`📅 Mensajes en rango de 7 días: ${messagesInRange}`);
 
     // 1. VOLUMEN TOTAL (Real)
+    // NOTA: Los timestamps están guardados como strings, necesitamos convertirlos
     const volumeStats = await Message.aggregate([
-      { $match: { clientId, timestamp: { $gte: startDate, $lte: endDate } } },
+      {
+        $addFields: {
+          timestampDate: { $toDate: "$timestamp" }
+        }
+      },
+      {
+        $match: {
+          clientId,
+          timestampDate: { $gte: startDate, $lte: endDate }
+        }
+      },
       { $group: { _id: "$sender", count: { $sum: 1 } } }
     ]);
 
@@ -777,10 +873,20 @@ exports.getAnalytics = async (req, res) => {
     const sent = volumeStats.find(s => s._id === 'bot')?.count || 0;
 
     const dailyTrend = await Message.aggregate([
-      { $match: { clientId, timestamp: { $gte: startDate, $lte: endDate } } },
+      {
+        $addFields: {
+          timestampDate: { $toDate: "$timestamp" }
+        }
+      },
+      {
+        $match: {
+          clientId,
+          timestampDate: { $gte: startDate, $lte: endDate }
+        }
+      },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestampDate" } },
           total: { $sum: 1 },
           userCount: { $sum: { $cond: [{ $eq: ["$sender", "user"] }, 1, 0] } }
         }
@@ -789,8 +895,18 @@ exports.getAnalytics = async (req, res) => {
     ]);
 
     const peakHours = await Message.aggregate([
-      { $match: { clientId, timestamp: { $gte: startDate } } },
-      { $group: { _id: { $hour: "$timestamp" }, count: { $sum: 1 } } },
+      {
+        $addFields: {
+          timestampDate: { $toDate: "$timestamp" }
+        }
+      },
+      {
+        $match: {
+          clientId,
+          timestampDate: { $gte: startDate }
+        }
+      },
+      { $group: { _id: { $hour: "$timestampDate" }, count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 3 }
     ]);
@@ -799,17 +915,40 @@ exports.getAnalytics = async (req, res) => {
       { $match: { clientId, status: 'active' } },
       { $group: { _id: "$category", total: { $sum: "$totalCount" } } },
       { $sort: { total: -1 } },
-      { $limit: 4 } 
+      { $limit: 4 }
     ]);
 
     let satisfactionRate = null;
-    if (received > 5) { 
-       const positiveMessages = await Message.countDocuments({
-         clientId, sender: 'user', timestamp: { $gte: startDate },
-         content: { $regex: /gracias|excelente|bueno|genial|sirve|ayuda/i }
-       });
-       satisfactionRate = Math.min(Math.round((positiveMessages / received) * 100) + 50, 100);
+    if (received > 5) {
+      // Usar aggregation para convertir timestamp string a date
+      const positiveMessagesResult = await Message.aggregate([
+        {
+          $addFields: {
+            timestampDate: { $toDate: "$timestamp" }
+          }
+        },
+        {
+          $match: {
+            clientId,
+            sender: 'user',
+            timestampDate: { $gte: startDate },
+            content: { $regex: /gracias|excelente|bueno|genial|sirve|ayuda/i }
+          }
+        },
+        { $count: "total" }
+      ]);
+      const positiveMessages = positiveMessagesResult[0]?.total || 0;
+      satisfactionRate = Math.min(Math.round((positiveMessages / received) * 100) + 50, 100);
     }
+
+    console.log('📊 Analytics Data:', {
+      received,
+      sent,
+      total: received + sent,
+      dailyTrendCount: dailyTrend.length,
+      peakHoursCount: peakHours.length,
+      topCategoriesCount: topCategories.length
+    });
 
     res.json({
       success: true,
@@ -820,7 +959,7 @@ exports.getAnalytics = async (req, res) => {
         dailyTrend,
         peakHours: peakHours.map(h => `${h._id}:00`),
         topCategories: topCategories.map(c => ({ category: c._id, count: c.total })),
-        satisfactionRate 
+        satisfactionRate
       }
     });
 

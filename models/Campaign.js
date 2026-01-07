@@ -18,8 +18,15 @@ const recipientSchema = new mongoose.Schema({
         default: 'pending'
     },
     sentAt: Date,
-    error: String
-}, { _id: false });
+    error: String,
+    // Tracking fields
+    opened: { type: Boolean, default: false },
+    openedAt: Date,
+    openCount: { type: Number, default: 0 },
+    clicked: { type: Boolean, default: false },
+    clickedAt: Date,
+    clickCount: { type: Number, default: 0 }
+}, { _id: true });
 
 const campaignSchema = new mongoose.Schema({
     name: {
@@ -68,6 +75,13 @@ const campaignSchema = new mongoose.Schema({
         ref: 'EmailCredential',
         required: true
     },
+    // Statistics fields
+    openCount: { type: Number, default: 0 },
+    clickCount: { type: Number, default: 0 },
+    uniqueOpens: { type: Number, default: 0 },
+    uniqueClicks: { type: Number, default: 0 },
+    openRate: { type: Number, default: 0 }, // Percentage
+    clickRate: { type: Number, default: 0 }, // Percentage
     sentAt: Date,
     completedAt: Date
 }, {

@@ -427,7 +427,9 @@ async function sendCampaignEmails(campaignId) {
                     recipientName: recipient.name,
                     transporter: transporter,
                     fromName: campaign.emailCredential.fromName,
-                    fromEmail: campaign.emailCredential.fromEmail
+                    fromEmail: campaign.emailCredential.fromEmail,
+                    campaignId: campaign._id.toString(),
+                    recipientId: recipient._id.toString()
                 });
 
                 recipient.status = 'sent';
@@ -481,7 +483,11 @@ exports.getStats = async (req, res) => {
                     totalCampaigns: { $sum: 1 },
                     totalSent: { $sum: '$sentCount' },
                     totalFailed: { $sum: '$failedCount' },
-                    totalRecipients: { $sum: '$totalRecipients' }
+                    totalRecipients: { $sum: '$totalRecipients' },
+                    totalOpens: { $sum: { $ifNull: ['$uniqueOpens', 0] } },
+                    totalClicks: { $sum: { $ifNull: ['$uniqueClicks', 0] } },
+                    avgOpenRate: { $avg: { $ifNull: ['$openRate', 0] } },
+                    avgClickRate: { $avg: { $ifNull: ['$clickRate', 0] } }
                 }
             }
         ]);
@@ -498,11 +504,15 @@ exports.getStats = async (req, res) => {
 
         res.json({
             success: true,
-            stats: stats[0] || {
-                totalCampaigns: 0,
-                totalSent: 0,
-                totalFailed: 0,
-                totalRecipients: 0
+            stats: {
+                totalCampaigns: stats[0]?.totalCampaigns || 0,
+                totalSent: stats[0]?.totalSent || 0,
+                totalFailed: stats[0]?.totalFailed || 0,
+                totalRecipients: stats[0]?.totalRecipients || 0,
+                totalOpens: stats[0]?.totalOpens || 0,
+                totalClicks: stats[0]?.totalClicks || 0,
+                averageOpenRate: Math.round(stats[0]?.avgOpenRate || 0),
+                averageClickRate: Math.round(stats[0]?.avgClickRate || 0)
             },
             statusCounts: statusCounts.reduce((acc, item) => {
                 acc[item._id] = item.count;
