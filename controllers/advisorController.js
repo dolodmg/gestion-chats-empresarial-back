@@ -95,7 +95,7 @@ exports.getAdvisors = async (req, res) => {
 exports.createAdvisor = async (req, res) => {
     try {
         const clientId = req.user.clientId;
-        const { name, email, phone } = req.body;
+        const { name, email, password, phone } = req.body;
 
         if (!name || name.trim() === '') {
             return res.status(400).json({
@@ -111,6 +111,21 @@ exports.createAdvisor = async (req, res) => {
             });
         }
 
+        if (!password || password.trim() === '') {
+            return res.status(400).json({
+                success: false,
+                error: 'La contraseña es requerida'
+            });
+        }
+
+        // Validar longitud mínima de contraseña
+        if (password.trim().length < 6) {
+            return res.status(400).json({
+                success: false,
+                error: 'La contraseña debe tener al menos 6 caracteres'
+            });
+        }
+
         // Verificar que el email no esté en uso
         const existingAdvisor = await Advisor.findOne({ email: email.trim().toLowerCase() });
         if (existingAdvisor) {
@@ -120,21 +135,18 @@ exports.createAdvisor = async (req, res) => {
             });
         }
 
-        // Generar contraseña aleatoria
-        const generatedPassword = generateRandomPassword(12);
-
         const advisor = new Advisor({
             clientId,
             name: name.trim(),
             email: email.trim().toLowerCase(),
-            password: generatedPassword, // Se hasheará automáticamente por el middleware pre-save
-            phone: phone || '',
+            password: password.trim(), // Se hasheará automáticamente por el middleware pre-save
+            phone: phone?.trim() || '',
             active: true
         });
 
         await advisor.save();
 
-        // Retornar el asesor con la contraseña generada (solo esta vez)
+        // Retornar el asesor creado
         res.status(201).json({
             success: true,
             message: 'Asesor creado correctamente',
@@ -145,8 +157,7 @@ exports.createAdvisor = async (req, res) => {
                 email: advisor.email,
                 phone: advisor.phone,
                 active: advisor.active,
-                createdAt: advisor.createdAt,
-                generatedPassword: generatedPassword // IMPORTANTE: Solo se muestra al crear
+                createdAt: advisor.createdAt
             }
         });
     } catch (error) {

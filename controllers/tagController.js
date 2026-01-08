@@ -20,6 +20,11 @@ exports.getUserTags = async (req, res) => {
 
 exports.createTag = async (req, res) => {
   try {
+    // Prevent advisors from creating tags
+    if (req.user.role === 'advisor') {
+      return res.status(403).json({ error: 'Los asesores no pueden crear etiquetas' });
+    }
+
     const userId = req.user.id;
     const { name, color } = req.body;
 
@@ -94,6 +99,11 @@ exports.updateTagColor = async (req, res) => {
 
 exports.deleteTag = async (req, res) => {
   try {
+    // Prevent advisors from deleting tags
+    if (req.user.role === 'advisor') {
+      return res.status(403).json({ error: 'Los asesores no pueden eliminar etiquetas' });
+    }
+
     const userId = req.user.id;
     const { tagName } = req.params;
     const tagNameLower = tagName.toLowerCase();

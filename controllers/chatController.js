@@ -28,7 +28,7 @@ exports.getChats = async (req, res) => {
     console.log('Buscando chats para clientId:', clientId, `(limit: ${limit}, skip: ${skip}), role: ${req.user.role}`);
 
     // Primera parte: agregación de mensajes (igual que antes)
-    const chats = await Message.aggregate([
+    let chats = await Message.aggregate([
       {
         $match: {
           clientId: clientId,
@@ -95,16 +95,76 @@ exports.getChats = async (req, res) => {
     // Obtener el estado Y TAGS de cada chat desde la colección Chat
     const chatIds = chats.map(chat => chat.chatId);
 
+    // 🔑 FILTRAR CHATS PARA ASESORES (por números en Mis Datos)
+    if (req.user.role === 'advisor') {
+      console.log(`🔍 ADVISOR: Filtrando chats para asesor ${req.user.advisorId}`);
+      try {
+        const CustomTable = require('../models/CustomTable');
+        const mongoose = require('mongoose');
+
+        const tables = await CustomTable.find({ clientId, isActive: true });
+        console.log(`🔍 ADVISOR: Tablas encontradas: ${tables.length}`);
+
+        // Recolectar todos los números de teléfono asignados al asesor
+        const assignedPhoneNumbers = new Set();
+
+        for (const table of tables) {
+          const collectionName = table.collectionName;
+          let DataModel;
+
+          if (mongoose.models[collectionName]) {
+            DataModel = mongoose.models[collectionName];
+          } else {
+            DataModel = mongoose.model(
+              collectionName,
+              new mongoose.Schema(table.getValidationSchema()),
+              collectionName
+            );
+          }
+
+          const phoneFields = table.fields.filter(f =>
+            f.type === 'phone' || f.name.toLowerCase().includes('telefono') || f.name.toLowerCase().includes('phone')
+          );
+
+          for (const phoneField of phoneFields) {
+            const records = await DataModel.find({
+              assignedAdvisorId: req.user.advisorId
+            }).select(phoneField.name);
+
+            records.forEach(record => {
+              const phoneValue = record[phoneField.name];
+              if (phoneValue) {
+                // Normalizar a string
+                assignedPhoneNumbers.add(String(phoneValue));
+              }
+            });
+          }
+        }
+
+        console.log(`🔍 ADVISOR: Números asignados: ${assignedPhoneNumbers.size}`);
+        console.log(`� ADVISOR: Números:`, Array.from(assignedPhoneNumbers));
+
+        // Filtrar chats que coincidan con los números asignados
+        chats = chats.filter(chat => {
+          const chatPhone = chat.phoneNumber || chat.chatId;
+          const match = assignedPhoneNumbers.has(String(chatPhone));
+          if (match) {
+            console.log(`✅ ADVISOR: Chat ${chatPhone} coincide`);
+          }
+          return match;
+        });
+
+        console.log(`✅ ADVISOR: Chats filtrados: ${chats.length}`);
+      } catch (filterError) {
+        console.error('⚠️ Error filtrando chats para asesor:', filterError);
+      }
+    }
+
     // Construir query para Chat según el rol
     const chatQuery = {
       chatId: { $in: chatIds },
       clientId
     };
-
-    // Si es asesor, filtrar solo chats asignados a él
-    if (req.user.role === 'advisor') {
-      chatQuery.assignedAdvisorId = req.user.advisorId;
-    }
 
     const chatStatuses = await Chat.find(chatQuery)
       .select('chatId chatStatus statusChangeTime tags assignedAdvisorName assignedAdvisorId').lean();
@@ -133,6 +193,7 @@ exports.getChats = async (req, res) => {
       }
     });
 
+
     if (chatsToUpdate.length > 0) {
       await Chat.updateMany(
         { chatId: { $in: chatsToUpdate }, clientId },
@@ -141,15 +202,10 @@ exports.getChats = async (req, res) => {
       console.log(`${chatsToUpdate.length} chats actualizados a modo bot por timeout`);
     }
 
-    // Filtrar chats según el rol (para asesores, solo mostrar los que tienen estado)
-    let filteredChats = chats;
-    if (req.user.role === 'advisor') {
-      // Solo incluir chats que existen en statusMap (es decir, que están asignados al asesor)
-      filteredChats = chats.filter(chat => statusMap[chat.chatId]);
-    }
+
 
     // Añadir la información de estado Y TAGS a cada chat
-    const enrichedChats = filteredChats.map(chat => ({
+    const enrichedChats = chats.map(chat => ({
       ...chat,
       chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
       statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
@@ -229,6 +285,62 @@ exports.getChat = async (req, res) => {
 
     // 🔒 VERIFICACIÓN DE AUTORIZACIÓN PARA ASESORES
     if (req.user.role === 'advisor') {
+      // Si el chat no tiene asesor asignado, buscar en Mis Datos
+      if (!chat.assignedAdvisorId) {
+        try {
+          const advisorService = require('../services/advisorService');
+          const phoneNumber = messages[0].phoneNumber || chatId;
+
+          // Buscar si este número tiene un asesor asignado en alguna tabla de Mis Datos
+          const CustomTable = require('../models/CustomTable');
+          const mongoose = require('mongoose');
+
+          const tables = await CustomTable.find({ clientId, isActive: true });
+
+          for (const table of tables) {
+            // Obtener modelo dinámico para esta tabla
+            const collectionName = table.collectionName;
+            let DataModel;
+
+            if (mongoose.models[collectionName]) {
+              DataModel = mongoose.models[collectionName];
+            } else {
+              DataModel = mongoose.model(
+                collectionName,
+                new mongoose.Schema(table.getValidationSchema()),
+                collectionName
+              );
+            }
+
+            // Buscar registro con este teléfono
+            const phoneFields = table.fields.filter(f =>
+              f.type === 'phone' || f.name.toLowerCase().includes('telefono') || f.name.toLowerCase().includes('phone')
+            );
+
+            for (const phoneField of phoneFields) {
+              const record = await DataModel.findOne({
+                [phoneField.name]: phoneNumber,
+                assignedAdvisorId: { $exists: true, $ne: null }
+              });
+
+              if (record && record.assignedAdvisorId) {
+                // Encontramos un registro con asesor asignado
+                // Actualizar el chat con esta asignación
+                chat.assignedAdvisorId = record.assignedAdvisorId;
+                chat.assignedAdvisorName = record.assignedAdvisorName;
+                await chat.save();
+                console.log(`✅ Chat ${chatId} asignado automáticamente a asesor ${record.assignedAdvisorName}`);
+                break;
+              }
+            }
+
+            if (chat.assignedAdvisorId) break;
+          }
+        } catch (syncError) {
+          console.error('Error sincronizando asesor desde Mis Datos:', syncError);
+        }
+      }
+
       // Verificar que el chat esté asignado a este asesor
       if (!chat.assignedAdvisorId || chat.assignedAdvisorId.toString() !== req.user.advisorId) {
         console.log(`Asesor ${req.user.advisorId} intentó acceder a chat no asignado: ${chatId}`);
