@@ -69,18 +69,48 @@ exports.generateSummary = async (req, res) => {
             });
         }
 
-        // 2. Obtener mensajes del chat (limitar a 100 para no exceder tokens)
-        const messages = await Message.find({ chatId, clientId })
-            .sort({ timestamp: 1 })
-            .limit(100)
-            .select('sender content timestamp');
+        // 2. Buscar el último resumen para saber desde cuándo resumir
+        const lastSummary = await ChatSummary.findOne({
+            chatId,
+            clientId,
+            isActive: true
+        }).sort({ generatedAt: -1 });
+
+        let messages;
+
+        if (lastSummary) {
+            // Si hay un resumen previo, solo tomar mensajes NUEVOS desde esa fecha
+            console.log(`Último resumen: ${lastSummary.generatedAt}, resumiendo solo mensajes nuevos`);
+            messages = await Message.find({
+                chatId,
+                clientId,
+                timestamp: { $gt: lastSummary.lastMessageDate } // Solo mensajes DESPUÉS del último resumen
+            })
+                .sort({ timestamp: 1 })
+                .limit(100)
+                .select('sender content timestamp');
+        } else {
+            // Si es el primer resumen, tomar los últimos 50 mensajes (no 100, para ser más específico)
+            console.log('Primer resumen, tomando últimos 50 mensajes');
+            messages = await Message.find({ chatId, clientId })
+                .sort({ timestamp: -1 })
+                .limit(50)
+                .select('sender content timestamp');
+
+            // Reordenar cronológicamente
+            messages = messages.reverse();
+        }
 
         if (messages.length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'No hay mensajes para resumir'
+                error: lastSummary
+                    ? 'No hay mensajes nuevos desde el último resumen'
+                    : 'No hay mensajes para resumir'
             });
         }
+
+        console.log(`Resumiendo ${messages.length} mensajes`);
 
         // 4. Construir transcript para la IA
         let transcript = '';
