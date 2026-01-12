@@ -291,8 +291,13 @@ exports.getChat = async (req, res) => {
         contactName: contactName,
         lastMessage: messages[messages.length - 1].content,
         lastMessageTimestamp: messages[messages.length - 1].timestamp,
-        chatStatus: 'bot' // Por defecto, el chat es manejado por el bot
+        chatStatus: 'bot', // Por defecto, el chat es manejado por el bot
+        lastOpenedAt: new Date() // Registrar que se abrió el chat
       });
+      await chat.save();
+    } else {
+      // Actualizar lastOpenedAt cuando se abre un chat existente
+      chat.lastOpenedAt = new Date();
       await chat.save();
     }
 

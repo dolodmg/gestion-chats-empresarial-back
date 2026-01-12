@@ -64,7 +64,11 @@ const ChatSchema = new mongoose.Schema({
     type: String,
     trim: true,
     lowercase: true
-  }]
+  }],
+  lastOpenedAt: {
+    type: Date,
+    default: null
+  }
 });
 
 module.exports = mongoose.model('Chat', ChatSchema);

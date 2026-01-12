@@ -90,6 +90,9 @@ app.use('/api/advisors', require('./routes/advisors'));
 // ✨ NUEVO: Rutas de Métricas de Asesores
 app.use('/api/advisor-metrics', require('./routes/advisorMetrics'));
 
+// ✨ NUEVO: Rutas de Resúmenes de Conversaciones
+app.use('/api/summaries', require('./routes/summaries'));
+
 // ==================== ENDPOINT N8N ====================
 
 // ✨ API ENDPOINT PRINCIPAL - Notificación de n8n (CON AUTENTICACIÓN)
