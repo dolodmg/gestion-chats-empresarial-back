@@ -18,4 +18,7 @@ router.post('/:chatId/status', auth, chatController.changeChatStatus);
 // Enviar mensaje manual
 router.post('/:chatId/message', auth, chatController.sendManualMessage);
 
+// Assign chat to advisor manually
+router.put('/:chatId/assign-advisor', auth, chatController.assignChatToAdvisor);
+
 module.exports = router;

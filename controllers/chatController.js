@@ -3,6 +3,7 @@ const Message = require('../models/Message');
 const WhatsAppService = require('../services/whatsappService');
 const ChatState = require('../models/ChatState');
 const sseService = require('../services/sseService');
+const Advisor = require('../models/Advisor');
 
 // Obtener todos los chats de un cliente
 // ⚡ OPTIMIZADO - Obtener todos los chats de un cliente con paginación
@@ -95,7 +96,7 @@ exports.getChats = async (req, res) => {
     // Obtener el estado Y TAGS de cada chat desde la colección Chat
     const chatIds = chats.map(chat => chat.chatId);
 
-    // 🔑 FILTRAR CHATS PARA ASESORES (por números en Mis Datos)
+    // 🔑 FILTRAR CHATS PARA ASESORES (por números en Mis Datos Y asignación manual)
     if (req.user.role === 'advisor') {
       console.log(`🔍 ADVISOR: Filtrando chats para asesor ${req.user.advisorId}`);
       try {
@@ -142,14 +143,26 @@ exports.getChats = async (req, res) => {
         }
 
         console.log(`🔍 ADVISOR: Números asignados: ${assignedPhoneNumbers.size}`);
-        console.log(`� ADVISOR: Números:`, Array.from(assignedPhoneNumbers));
+        console.log(`📞 ADVISOR: Números:`, Array.from(assignedPhoneNumbers));
 
-        // Filtrar chats que coincidan con los números asignados
+        // También obtener chats asignados manualmente
+        const manuallyAssignedChats = await Chat.find({
+          clientId,
+          assignedAdvisorId: req.user.advisorId
+        }).select('chatId').lean();
+
+        const manuallyAssignedChatIds = new Set(manuallyAssignedChats.map(c => c.chatId));
+        console.log(`👤 ADVISOR: Chats asignados manualmente: ${manuallyAssignedChatIds.size}`);
+
+        // Filtrar chats que coincidan con los números asignados O estén asignados manualmente
         chats = chats.filter(chat => {
           const chatPhone = chat.phoneNumber || chat.chatId;
-          const match = assignedPhoneNumbers.has(String(chatPhone));
+          const matchByPhone = assignedPhoneNumbers.has(String(chatPhone));
+          const matchByManualAssignment = manuallyAssignedChatIds.has(chat.chatId);
+          const match = matchByPhone || matchByManualAssignment;
+
           if (match) {
-            console.log(`✅ ADVISOR: Chat ${chatPhone} coincide`);
+            console.log(`✅ ADVISOR: Chat ${chat.chatId} coincide (${matchByPhone ? 'por teléfono' : 'asignación manual'})`);
           }
           return match;
         });
@@ -833,6 +846,63 @@ exports.findChatByPhone = async (req, res) => {
     res.json(enrichedChat);
   } catch (error) {
     console.error('Error finding chat by phone:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};
+
+// Assign chat to advisor manually
+exports.assignChatToAdvisor = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { advisorId } = req.body;
+
+    // Only clients and admins can assign chats
+    if (req.user.role === 'advisor') {
+      return res.status(403).json({ msg: 'Los asesores no pueden asignar chats' });
+    }
+
+    const clientId = req.user.role === 'admin' ? req.body.clientId || req.query.clientId : req.user.clientId;
+
+    if (!clientId) {
+      return res.status(400).json({ msg: 'Se requiere clientId' });
+    }
+
+    // Find the chat
+    const chat = await Chat.findOne({ chatId, clientId });
+
+    if (!chat) {
+      return res.status(404).json({ msg: 'Chat no encontrado' });
+    }
+
+    // If advisorId is provided, validate the advisor
+    let advisorName = null;
+    if (advisorId) {
+      const advisor = await Advisor.findOne({ _id: advisorId, clientId, active: true });
+
+      if (!advisor) {
+        return res.status(404).json({ msg: 'Asesor no encontrado o inactivo' });
+      }
+
+      advisorName = advisor.name;
+    }
+
+    // Update the chat assignment
+    chat.assignedAdvisorId = advisorId || null;
+    chat.assignedAdvisorName = advisorName;
+    await chat.save();
+
+    console.log(`✅ Chat ${chatId} ${advisorId ? `asignado a ${advisorName}` : 'desasignado'}`);
+
+    res.json({
+      message: advisorId ? 'Chat asignado exitosamente' : 'Chat desasignado exitosamente',
+      chat: {
+        chatId: chat.chatId,
+        assignedAdvisorId: chat.assignedAdvisorId,
+        assignedAdvisorName: chat.assignedAdvisorName
+      }
+    });
+  } catch (error) {
+    console.error('Error assigning chat to advisor:', error);
     res.status(500).json({ msg: 'Error del servidor' });
   }
 };

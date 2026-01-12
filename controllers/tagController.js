@@ -3,7 +3,20 @@ const Chat = require('../models/Chat');
 
 exports.getUserTags = async (req, res) => {
   try {
-    const userId = req.user.id;
+    let userId = req.user.id;
+
+    // If user is an advisor, get tags from their client instead
+    if (req.user.role === 'advisor') {
+      const User = require('../models/User');
+      const client = await User.findOne({ clientId: req.user.clientId, role: 'client' });
+
+      if (client) {
+        userId = client._id.toString();
+      } else {
+        // If no client found, return empty tags
+        return res.json({ tags: [] });
+      }
+    }
 
     let userTags = await UserTag.findOne({ userId });
 
