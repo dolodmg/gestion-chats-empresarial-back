@@ -22,18 +22,24 @@ const UserSchema = new mongoose.Schema({
   },
   clientId: {
     type: String,
-    required: function() { return this.role === 'client'; },
-    unique: function() { return this.role === 'client'; },
+    required: function () { return this.role === 'client'; },
+    unique: function () { return this.role === 'client'; },
   },
   workflowId: {
     type: String,
-    required: function() { return this.role === 'client'; },
+    required: function () { return this.role === 'client'; },
     default: null,
   },
   // Nuevo campo para el token de WhatsApp
   whatsappToken: {
     type: String,
-    required: function() { return this.role === 'client'; },
+    required: function () { return this.role === 'client'; },
+    default: null,
+  },
+  // WhatsApp Business Account ID (WABA-ID) para gestión de plantillas
+  wabaId: {
+    type: String,
+    required: false,
     default: null,
   },
   createdAt: {
@@ -43,7 +49,7 @@ const UserSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-UserSchema.pre('save', async function(next) {
+UserSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     return next();
   }

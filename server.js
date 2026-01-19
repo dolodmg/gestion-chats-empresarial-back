@@ -93,6 +93,10 @@ app.use('/api/advisor-metrics', require('./routes/advisorMetrics'));
 // ✨ NUEVO: Rutas de Resúmenes de Conversaciones
 app.use('/api/summaries', require('./routes/summaries'));
 
+// ✨ NUEVO: Rutas de Plantillas de WhatsApp
+app.use('/api/templates', require('./routes/templates'));
+
+
 // ==================== ENDPOINT N8N ====================
 
 // ✨ API ENDPOINT PRINCIPAL - Notificación de n8n (CON AUTENTICACIÓN)
