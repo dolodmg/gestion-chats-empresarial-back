@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const chatController = require('../controllers/chatController');
+const chatExportController = require('../controllers/chatExportController');
 const auth = require('../middleware/auth');
 
 // Obtener todos los chats
@@ -8,6 +9,12 @@ router.get('/', auth, chatController.getChats);
 
 // Buscar chat por número de teléfono
 router.get('/search/phone', auth, chatController.findChatByPhone);
+
+// Obtener todos los IDs de chats (para seleccionar todos)
+router.get('/export/all-ids', auth, chatExportController.getAllChatIds);
+
+// Exportar chats seleccionados
+router.post('/export', auth, chatExportController.exportChats);
 
 // Obtener un chat específico con sus mensajes
 router.get('/:chatId', auth, chatController.getChat);
