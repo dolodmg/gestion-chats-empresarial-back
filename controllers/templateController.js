@@ -384,7 +384,7 @@ exports.sendTemplateToChat = async (req, res) => {
         // Cambiar chat a modo "human" automáticamente
         console.log(`📝 Cambiando chat ${chatId} a modo HUMAN...`);
         console.log(`Estado anterior: ${chat.chatStatus}`);
-        
+
         chat.chatStatus = 'human';
         chat.statusChangeTime = new Date();
         chat.lastMessage = messageContent;
@@ -393,6 +393,7 @@ exports.sendTemplateToChat = async (req, res) => {
 
         console.log(`✅ Chat ${chatId} cambiado a modo HUMAN exitosamente`);
         console.log(`Estado actual: ${chat.chatStatus}`);
+        console.log('🎉 ===== PLANTILLA ENVIADA EXITOSAMENTE =====');
 
         res.json({
             msg: 'Plantilla enviada exitosamente',
@@ -401,7 +402,9 @@ exports.sendTemplateToChat = async (req, res) => {
             chatStatus: 'human'
         });
     } catch (error) {
-        console.error('Error en sendTemplateToChat:', error);
+        console.error('❌ ===== ERROR EN ENVÍO DE PLANTILLA =====');
+        console.error('Error completo:', error);
+        console.error('Stack trace:', error.stack);
         res.status(500).json({
             msg: 'Error del servidor',
             error: error.message
