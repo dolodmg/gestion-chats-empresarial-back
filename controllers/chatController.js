@@ -912,3 +912,236 @@ exports.assignChatToAdvisor = async (req, res) => {
   }
 };
 
+// Search chats by name or phone number across entire database
+exports.searchChats = async (req, res) => {
+  try {
+    const { query } = req.query;
+    const clientId = req.user.role === 'admin'
+      ? req.query.clientId
+      : req.user.clientId;
+
+    if (!clientId) {
+      return res.status(400).json({ msg: 'Se requiere clientId' });
+    }
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({ msg: 'Se requiere un término de búsqueda' });
+    }
+
+    console.log(`Buscando chats: query="${query}", clientId: ${clientId}`);
+
+    // Normalizar el número de teléfono para búsqueda
+    const normalizePhone = (phone) => {
+      return phone.replace(/[\s\-\(\)\+]/g, '');
+    };
+
+    const normalizedQuery = normalizePhone(query);
+    const searchTerm = query.trim();
+
+    // Buscar en la colección de mensajes
+    const chats = await Message.aggregate([
+      {
+        $match: {
+          clientId: clientId,
+          chatId: { $ne: null },
+          content: { $ne: null }
+        }
+      },
+      { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
+      {
+        $group: {
+          _id: "$chatId",
+          lastMessage: { $first: "$content" },
+          lastMessageTimestamp: { $first: "$timestamp" },
+          phoneNumber: { $first: "$phoneNumber" },
+          contactName: {
+            $first: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$contactName", null] },
+                    { $ne: ["$contactName", ""] },
+                    { $ne: ["$contactName", "Usuario Prueba"] }
+                  ]
+                },
+                "$contactName",
+                null
+              ]
+            }
+          },
+          clientId: { $first: "$clientId" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          chatId: "$_id",
+          lastMessage: 1,
+          lastMessageTimestamp: 1,
+          phoneNumber: 1,
+          contactName: { $ifNull: ["$contactName", "$_id"] },
+          clientId: 1
+        }
+      }
+    ]);
+
+    // Filtrar chats que coincidan con el término de búsqueda
+    let matchingChats = chats.filter(chat => {
+      // Búsqueda por número de teléfono (normalizado)
+      const normalizedChatPhone = normalizePhone(chat.phoneNumber || '');
+      const phoneMatch = normalizedChatPhone.includes(normalizedQuery) ||
+        normalizedQuery.includes(normalizedChatPhone);
+
+      // Búsqueda por nombre (case-insensitive, búsqueda parcial)
+      const chatName = (chat.contactName || '').toLowerCase();
+      const nameMatch = chatName.includes(searchTerm.toLowerCase());
+
+      return phoneMatch || nameMatch;
+    });
+
+    // Limitar resultados a 50
+    matchingChats = matchingChats.slice(0, 50);
+
+    console.log(`Encontrados ${matchingChats.length} chats que coinciden con "${query}"`);
+
+    // Si no hay resultados, retornar array vacío
+    if (matchingChats.length === 0) {
+      return res.json([]);
+    }
+
+    // Obtener chatIds de los resultados
+    const chatIds = matchingChats.map(chat => chat.chatId);
+
+    // 🔒 FILTRO PARA ASESORES: Solo mostrar chats asignados
+    if (req.user.role === 'advisor') {
+      try {
+        console.log(`🔍 ADVISOR: Filtrando chats para asesor ${req.user.advisorId}`);
+
+        const assignedPhoneNumbers = new Set();
+
+        // Buscar números de teléfono asignados en Mis Datos
+        const CustomTable = require('../models/CustomTable');
+        const mongoose = require('mongoose');
+
+        const tables = await CustomTable.find({ clientId, isActive: true });
+
+        for (const table of tables) {
+          const collectionName = table.collectionName;
+          let DataModel;
+
+          if (mongoose.models[collectionName]) {
+            DataModel = mongoose.models[collectionName];
+          } else {
+            DataModel = mongoose.model(
+              collectionName,
+              new mongoose.Schema(table.getValidationSchema()),
+              collectionName
+            );
+          }
+
+          const phoneFields = table.fields.filter(f =>
+            f.type === 'phone' || f.name.toLowerCase().includes('telefono') || f.name.toLowerCase().includes('phone')
+          );
+
+          for (const phoneField of phoneFields) {
+            const records = await DataModel.find({
+              assignedAdvisorId: req.user.advisorId
+            }).select(phoneField.name);
+
+            records.forEach(record => {
+              const phoneValue = record[phoneField.name];
+              if (phoneValue) {
+                assignedPhoneNumbers.add(String(phoneValue));
+              }
+            });
+          }
+        }
+
+        // También obtener chats asignados manualmente
+        const manuallyAssignedChats = await Chat.find({
+          clientId,
+          assignedAdvisorId: req.user.advisorId
+        }).select('chatId').lean();
+
+        const manuallyAssignedChatIds = new Set(manuallyAssignedChats.map(c => c.chatId));
+
+        // Filtrar chats que coincidan con los números asignados O estén asignados manualmente
+        matchingChats = matchingChats.filter(chat => {
+          const chatPhone = chat.phoneNumber || chat.chatId;
+          const matchByPhone = assignedPhoneNumbers.has(String(chatPhone));
+          const matchByManualAssignment = manuallyAssignedChatIds.has(chat.chatId);
+          return matchByPhone || matchByManualAssignment;
+        });
+
+        console.log(`✅ ADVISOR: Chats filtrados en búsqueda: ${matchingChats.length}`);
+      } catch (filterError) {
+        console.error('⚠️ Error filtrando chats para asesor en búsqueda:', filterError);
+      }
+    }
+
+    // Obtener estados y tags de los chats
+    const chatQuery = {
+      chatId: { $in: matchingChats.map(c => c.chatId) },
+      clientId
+    };
+
+    const chatStatuses = await Chat.find(chatQuery)
+      .select('chatId chatStatus statusChangeTime tags assignedAdvisorName assignedAdvisorId').lean();
+
+    // Crear un mapa de estados de chat
+    const statusMap = {};
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const chatsToUpdate = [];
+
+    chatStatuses.forEach(chat => {
+      if (chat.chatStatus === 'human' && chat.statusChangeTime && chat.statusChangeTime < thirtyMinutesAgo) {
+        statusMap[chat.chatId] = {
+          chatStatus: 'bot',
+          statusChangeTime: null,
+          tags: chat.tags || [],
+          assignedAdvisorName: chat.assignedAdvisorName || null
+        };
+        chatsToUpdate.push(chat.chatId);
+      } else {
+        statusMap[chat.chatId] = {
+          chatStatus: chat.chatStatus,
+          statusChangeTime: chat.statusChangeTime,
+          tags: chat.tags || [],
+          assignedAdvisorName: chat.assignedAdvisorName || null
+        };
+      }
+    });
+
+    // Actualizar chats expirados
+    if (chatsToUpdate.length > 0) {
+      await Chat.updateMany(
+        { chatId: { $in: chatsToUpdate }, clientId },
+        { $set: { chatStatus: 'bot', statusChangeTime: null } }
+      );
+    }
+
+    // Enriquecer chats con estado y tags
+    const enrichedChats = matchingChats.map(chat => ({
+      ...chat,
+      chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
+      statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
+      tags: statusMap[chat.chatId]?.tags || [],
+      assignedAdvisorName: statusMap[chat.chatId]?.assignedAdvisorName || null,
+      unreadCount: 0
+    }));
+
+    // Ordenar por fecha del último mensaje (más reciente primero)
+    enrichedChats.sort((a, b) => {
+      const dateA = new Date(a.lastMessageTimestamp);
+      const dateB = new Date(b.lastMessageTimestamp);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    res.json(enrichedChats);
+  } catch (error) {
+    console.error('Error searching chats:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};
+
+

@@ -7,6 +7,9 @@ const auth = require('../middleware/auth');
 // Obtener todos los chats
 router.get('/', auth, chatController.getChats);
 
+// Buscar chats por nombre o teléfono
+router.get('/search', auth, chatController.searchChats);
+
 // Buscar chat por número de teléfono
 router.get('/search/phone', auth, chatController.findChatByPhone);
 
