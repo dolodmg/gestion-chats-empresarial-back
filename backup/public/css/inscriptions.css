@@ -1,0 +1,532 @@
+/* Estilos para la página de inscripciones */
+.inscriptions-container {
+    max-width: 1200px;
+    margin: 20px auto 0 auto;
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    padding: 2rem;
+    animation: fadeIn 0.5s;
+    margin-bottom: 20px;
+}
+
+.inscriptions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.inscriptions-header h2 {
+    margin: 0;
+    color: var(--primary-dark);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.header-stats {
+    display: flex;
+    gap: 1rem;
+}
+
+.stat-card {
+    background-color: var(--primary-color);
+    color: var(--white);
+    padding: 1rem 1.5rem;
+    border-radius: var(--border-radius);
+    text-align: center;
+    min-width: 80px;
+}
+
+.stat-number {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
+.filters-section {
+    background-color: var(--light-bg);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 2rem;
+}
+
+.filters-row {
+    display: flex;
+    gap: 1.5rem;
+    align-items: end;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.filters-row:last-child {
+    margin-bottom: 0;
+}
+
+/* NUEVO: Fila específica para acciones */
+.filters-actions {
+    justify-content: flex-end;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    margin-bottom: 0;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-weight: 500;
+    color: var(--text-dark);
+    font-size: 0.9rem;
+}
+
+.filter-group input,
+.filter-group select {
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-size: 0.9rem;
+    min-width: 200px;
+    transition: var(--transition);
+}
+
+.filter-group input:focus,
+.filter-group select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(18, 140, 126, 0.1);
+}
+
+/* NUEVO: Estilos para botón de exportar */
+.success-btn {
+    background-color: #27ae60;
+    color: white;
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.success-btn:hover {
+    background-color: #229954;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+.success-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.export-icon {
+    font-size: 1rem;
+}
+
+/* NUEVO: Estilos para el modal de exportar */
+.export-summary {
+    background-color: var(--light-bg);
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    margin: 1rem 0;
+    font-size: 0.9rem;
+}
+
+.export-summary h4 {
+    margin: 0 0 0.5rem 0;
+    color: var(--primary-color);
+}
+
+.export-summary ul {
+    margin: 0;
+    padding-left: 1.5rem;
+}
+
+.export-summary li {
+    margin-bottom: 0.3rem;
+}
+
+.inscriptions-table-container {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 400px;
+    margin-bottom: 2rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border-color);
+}
+
+.inscriptions-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--white);
+    font-size: 0.9rem;
+}
+
+.inscriptions-table th,
+.inscriptions-table td {
+    padding: 1rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.inscriptions-table th {
+    background-color: var(--primary-color);
+    color: var(--white);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.1);
+}
+
+.inscriptions-table tr:hover {
+    background-color: rgba(18, 140, 126, 0.05);
+}
+
+.inscriptions-table tr:last-child td {
+    border-bottom: none;
+}
+
+.actions-column {
+    width: 100px;
+    text-align: center;
+}
+
+.delete-btn {
+    padding: 0.4rem 0.8rem;
+    background-color: var(--danger, #e74c3c);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: var(--transition);
+}
+
+.delete-btn:hover {
+    background-color: #c0392b;
+    transform: translateY(-1px);
+}
+
+.delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(3px);
+}
+
+.modal-content {
+    background-color: var(--white);
+    margin: 15% auto;
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.3s;
+}
+
+.confirm-modal-content {
+    text-align: center;
+}
+
+.confirm-modal-content h3 {
+    margin-bottom: 1rem;
+    color: var(--danger, #e74c3c);
+    font-size: 1.2rem;
+}
+
+.confirm-modal-content p {
+    color: var(--text-light);
+    margin-bottom: 1.5rem;
+}
+
+.confirm-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.danger-btn {
+    background-color: var(--danger, #e74c3c);
+    color: white;
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.danger-btn:hover {
+    background-color: #c0392b;
+    transform: translateY(-2px);
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Estilos para el scrollbar */
+.inscriptions-table-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.inscriptions-table-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.inscriptions-table-container::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.inscriptions-table-container::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
+}
+
+/* Footer */
+.app-footer {
+    background-color: var(--primary-color);
+    color: var(--white);
+    text-align: center;
+    padding: 1.5rem 1rem;
+    margin-top: 2rem;
+}
+
+.footer-content p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.footer-subtitle {
+    opacity: 0.8;
+    font-size: 0.8rem !important;
+    margin-top: 0.5rem !important;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+}
+
+.pagination button {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border-color);
+    background-color: var(--white);
+    color: var(--text-dark);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.pagination button:hover {
+    background-color: var(--light-bg);
+}
+
+.pagination button.active {
+    background-color: var(--primary-color);
+    color: var(--white);
+    border-color: var(--primary-color);
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-indicator {
+    display: inline-block;
+    margin-right: 10px;
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(18, 140, 126, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary-color);
+    animation: spin 1s ease-in-out infinite;
+}
+
+/* Responsive */
+@media screen and (max-width: 768px) {
+    .inscriptions-container {
+        margin: 10px;
+        padding: 1.5rem;
+    }
+    
+    .inscriptions-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .filters-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .filters-actions {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+    
+    .filter-group input,
+    .filter-group select {
+        min-width: 100%;
+    }
+    
+    .inscriptions-table {
+        font-size: 0.8rem;
+    }
+    
+    .inscriptions-table th,
+    .inscriptions-table td {
+        padding: 0.7rem 0.5rem;
+    }
+}
+
+@media screen and (max-width: 576px) {
+    .inscriptions-container {
+        margin: 5px;
+        padding: 1rem;
+    }
+    
+    .stat-card {
+        padding: 0.8rem 1rem;
+        min-width: 60px;
+    }
+    
+    .stat-number {
+        font-size: 1.2rem;
+    }
+    
+    .filters-actions {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .success-btn,
+    .secondary-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Agregar estos estilos al final del archivo inscriptions.css existente */
+
+/* Estilos para inscripciones extranjeras */
+.inscriptions-table .foreign-inscription {
+    background-color: rgba(52, 183, 241, 0.05); /* Azul muy claro */
+}
+
+.inscriptions-table .foreign-inscription:hover {
+    background-color: rgba(52, 183, 241, 0.1);
+}
+
+/* Indicador visual opcional para inscripciones extranjeras */
+.inscriptions-table .foreign-inscription td:first-child::before {
+    content: "🌍";
+    margin-right: 5px;
+    font-size: 0.9em;
+}
+
+/* Tooltip para explicar el indicador (opcional) */
+.foreign-inscription {
+    position: relative;
+}
+
+.foreign-inscription::after {
+    content: "Inscripción internacional";
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    top: -30px;
+    left: 10px;
+    transition: opacity 0.3s, visibility 0.3s;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.foreign-inscription:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Estilo para el filtro de "otros" */
+#provincia-filter option[value="otros"] {
+    background-color: #e3f2fd;
+    font-weight: 500;
+}
+
+/* Badge para mostrar cantidad de extranjeros en estadísticas */
+.foreign-stats-badge {
+    background-color: var(--secondary-color);
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+}
+
+/* NUEVO: Animación para el loading del export */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.export-loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s ease-in-out infinite;
+    margin-right: 0.5rem;
+}

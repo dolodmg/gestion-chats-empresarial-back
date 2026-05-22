@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis Datos - INTELIGENTE</title>
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/custom-tables.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ✅ HEADER CORREGIDO - Solo logo y acciones -->
+    <div class="app-header">
+        <div class="header-logo-container">
+            <img src="assets/logo.png" class="header-logo">
+            <!-- ❌ ELIMINADO: texto "INTELIGENTE" duplicado -->
+        </div>
+        <!-- ✅ MANTENER: user-info oculto para que el JS no falle -->
+        <div class="user-info" style="display: none;">
+            <span id="user-name">Usuario</span>
+        </div>
+        <div class="actions">
+            <button id="back-to-chats-btn" class="btn secondary-btn">Volver al Chat</button>
+            <button id="logout-btn" class="btn secondary-btn">Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <!-- Vista general de tablas -->
+    <div id="tables-overview" class="custom-tables-container">
+        <div class="custom-tables-header">
+            <h2>Mis Tablas de Datos</h2>
+        </div>
+
+        <div id="client-tables-list" class="tables-list">
+            <!-- Las tablas se cargarán dinámicamente aquí -->
+        </div>
+    </div>
+
+    <!-- Vista específica de datos de una tabla -->
+    <div id="table-data-view" class="table-data-container" style="display: none;">
+        <div class="table-data-header">
+            <div class="table-info">
+                <span id="table-data-icon" class="table-icon">T</span>
+                <div>
+                    <h2 id="table-data-title">Tabla de Datos</h2>
+                    <p>Gestiona tus registros</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="back-to-tables-btn" class="btn secondary-btn">← Volver a Mis Tablas</button>
+                <button id="add-record-btn" class="btn primary-btn">+ Agregar Registro</button>
+            </div>
+        </div>
+
+        <div class="data-controls">
+            <div class="search-container">
+                <input type="text" id="table-search" placeholder="Buscar en la tabla...">
+                <span class="search-icon">🔍</span>
+            </div>
+        </div>
+
+        <div id="data-table-container" class="data-table-container">
+            <!-- Los datos se cargarán dinámicamente aquí -->
+        </div>
+
+        <div class="pagination" id="table-pagination">
+            <!-- La paginación se generará aquí -->
+        </div>
+    </div>
+
+    <!-- ✅ MODAL CORREGIDO - Inicialmente oculto -->
+    <div id="record-modal" class="modal" style="display: none;">
+        <div class="modal-content record-modal-content">
+            <span class="modal-close">&times;</span>
+            <h2 id="record-modal-title">Agregar Nuevo Registro</h2>
+
+            <form id="record-form" class="record-form">
+                <div id="record-form-fields">
+                    <!-- Los campos se generarán dinámicamente -->
+                </div>
+
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                    <button type="button" class="btn secondary-btn modal-cancel-btn">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn primary-btn">
+                        Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/client-tables.js"></script>
+    <script src="js/ui-effects.js"></script>
+    <script>
+        // ✅ JAVASCRIPT CORREGIDO - Event listeners mejorados
+        document.addEventListener('DOMContentLoaded', function() {
+            const token = localStorage.getItem('token');
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+            if (!token) {
+                window.location.href = '/';
+                return;
+            }
+
+            // ✅ MANTENER: Mostrar nombre de usuario (pero oculto visualmente)
+            const userNameEl = document.getElementById('user-name');
+            if (userNameEl) {
+                userNameEl.textContent = user.name || 'Usuario';
+            }
+
+            // Manejar botón volver al chat
+            document.getElementById('back-to-chats-btn').addEventListener('click', function() {
+                window.location.href = '/index.html';
+            });
+
+            // Manejar cerrar sesión
+            document.getElementById('logout-btn').addEventListener('click', function() {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                localStorage.removeItem('selectedChatId');
+                window.location.href = '/';
+            });
+
+            // ✅ CORREGIDO: Event listener para cerrar modal
+            const modalCancelBtns = document.querySelectorAll('.modal-cancel-btn');
+            modalCancelBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('record-modal').style.display = 'none';
+                });
+            });
+
+            // ✅ CORREGIDO: Event listener para cerrar modal con X
+            const modalCloseBtns = document.querySelectorAll('.modal-close');
+            modalCloseBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.modal').style.display = 'none';
+                });
+            });
+
+            // ✅ CORREGIDO: Cerrar modal al hacer clic fuera
+            window.addEventListener('click', function(e) {
+                if (e.target.classList.contains('modal')) {
+                    e.target.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

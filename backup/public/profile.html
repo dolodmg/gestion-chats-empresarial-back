@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil</title>
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/profile.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-header">
+        <div class="user-info">
+            <span id="user-name">Usuario</span>
+        </div>
+        <div class="actions">
+            <button id="back-btn" class="btn secondary-btn">Volver</button>
+            <button id="logout-btn" class="btn secondary-btn">Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <div class="profile-section">
+        <h2>Cambiar Contraseña</h2>
+        <form id="change-password-form">
+            <div class="form-row">
+                <label for="current-password">Contraseña Actual</label>
+                <input type="password" id="current-password" required>
+            </div>
+            <div class="form-row">
+                <label for="new-password">Nueva Contraseña</label>
+                <input type="password" id="new-password" required>
+            </div>
+            <div class="form-row">
+                <label for="confirm-password">Confirmar Nueva Contraseña</label>
+                <input type="password" id="confirm-password" required>
+            </div>
+            <div class="btn-container">
+                <button type="submit" id="submit-btn" class="btn primary-btn">Cambiar Contraseña</button>
+            </div>
+            <div id="success-message" class="success-message"></div>
+            <div id="error-message" class="error-message"></div>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Verificar autenticación
+            const token = localStorage.getItem('token');
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+            if (!token) {
+                window.location.href = '/';
+                return;
+            }
+
+            // Mostrar nombre de usuario
+            document.getElementById('user-name').textContent = user.name || 'Usuario';
+
+            // Manejar botón volver
+            document.getElementById('back-btn').addEventListener('click', function() {
+                window.location.href = '/index.html';
+            });
+
+            // Manejar cerrar sesión
+            document.getElementById('logout-btn').addEventListener('click', function() {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                localStorage.removeItem('selectedChatId');
+                window.location.href = '/';
+            });
+
+            // Manejar formulario de cambio de contraseña
+            document.getElementById('change-password-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Cambiar estado del botón mientras procesa
+                const submitBtn = document.getElementById('submit-btn');
+                const originalBtnText = submitBtn.textContent;
+                submitBtn.textContent = 'Procesando...';
+                submitBtn.disabled = true;
+
+                const currentPassword = document.getElementById('current-password').value;
+                const newPassword = document.getElementById('new-password').value;
+                const confirmPassword = document.getElementById('confirm-password').value;
+
+                // Ocultar mensajes previos
+                document.getElementById('success-message').style.display = 'none';
+                document.getElementById('error-message').style.display = 'none';
+
+                // Validar contraseñas
+                if (newPassword !== confirmPassword) {
+                    const errorMessage = document.getElementById('error-message');
+                    errorMessage.textContent = 'Las contraseñas nuevas no coinciden';
+                    errorMessage.style.display = 'block';
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = false;
+                    return;
+                }
+
+                try {
+                    // Enviar solicitud al servidor
+                    const response = await fetch('/api/auth/change-password', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-auth-token': token
+                        },
+                        body: JSON.stringify({ currentPassword, newPassword })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.msg || 'Error al cambiar la contraseña');
+                    }
+
+                    // Mostrar mensaje de éxito
+                    const successMessage = document.getElementById('success-message');
+                    successMessage.textContent = data.msg || 'Contraseña cambiada exitosamente';
+                    successMessage.style.display = 'block';
+                    
+                    // Agregar nota adicional sobre cierre de sesión
+                    successMessage.innerHTML += '<p class="note">Para aplicar los cambios, deberás iniciar sesión nuevamente.</p>';
+                    
+                    // Opcional: Cerrar sesión automáticamente después de 3 segundos
+                    setTimeout(() => {
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('user');
+                        localStorage.removeItem('selectedChatId');
+                        window.location.href = '/';
+                    }, 3000);
+
+                    // Limpiar el formulario
+                    document.getElementById('current-password').value = '';
+                    document.getElementById('new-password').value = '';
+                    document.getElementById('confirm-password').value = '';
+
+                } catch (error) {
+                    // Mostrar mensaje de error
+                    const errorMessage = document.getElementById('error-message');
+                    errorMessage.textContent = error.message;
+                    errorMessage.style.display = 'block';
+                } finally {
+                    // Restaurar estado del botón
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = false;
+                }
+            });
+        });
+    </script>
+    <script src="js/ui-effects.js"></script>
+</body>
+</html>

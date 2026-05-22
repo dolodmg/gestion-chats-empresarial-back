@@ -1,5 +1,11 @@
 const ChatState = require('../models/ChatState');
 const Chat = require('../models/Chat');
+const User = require('../models/User');
+const UserTag = require('../models/UserTags');
+const sseService = require('../services/sseService');
+
+const ATTENTION_TAG_NAME = 'se requiere atencion';
+const ATTENTION_TAG_COLOR = '#ff0000';
 
 /**
  * Controlador para verificar el estado del chat
@@ -202,6 +208,119 @@ exports.changeChatState = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Error del servidor' 
+    });
+  }
+};
+
+/**
+ * Agrega la etiqueta "Se requiere atencion" a un chat usando la misma
+ * autenticacion de integracion que los endpoints de n8n.
+ */
+exports.markChatForAttention = async (req, res) => {
+  try {
+    const {
+      clientId,
+      chatId,
+      phoneNumber,
+      tagName = ATTENTION_TAG_NAME
+    } = req.body;
+
+    if (!clientId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clientId es requerido'
+      });
+    }
+
+    if (!chatId && !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere chatId o phoneNumber'
+      });
+    }
+
+    const normalizedTagName = String(tagName).trim().toLowerCase() || ATTENTION_TAG_NAME;
+
+    const clientUser = await User.findOne({ clientId, role: 'client' });
+
+    if (!clientUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'Cliente no encontrado para el clientId indicado'
+      });
+    }
+
+    const chatQuery = { clientId };
+    if (chatId) {
+      chatQuery.chatId = chatId;
+    } else {
+      chatQuery.phoneNumber = phoneNumber;
+    }
+
+    const chat = await Chat.findOne(chatQuery);
+
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        error: 'Chat no encontrado'
+      });
+    }
+
+    let userTags = await UserTag.findOne({ userId: clientUser._id });
+    let tagCreated = false;
+
+    if (!userTags) {
+      userTags = await UserTag.create({
+        userId: clientUser._id,
+        tags: []
+      });
+    }
+
+    const existingTag = userTags.tags.find(tag => tag.name === normalizedTagName);
+
+    if (!existingTag) {
+      userTags.tags.push({
+        name: normalizedTagName,
+        color: ATTENTION_TAG_COLOR
+      });
+      await userTags.save();
+      tagCreated = true;
+    }
+
+    const tagAlreadyAssigned = chat.tags.includes(normalizedTagName);
+
+    if (!tagAlreadyAssigned) {
+      chat.tags.push(normalizedTagName);
+      await chat.save();
+    }
+
+    sseService.notifyChatUpdate({
+      chatId: chat.chatId,
+      clientId: chat.clientId,
+      tags: chat.tags
+    });
+
+    return res.json({
+      success: true,
+      message: tagAlreadyAssigned
+        ? 'La etiqueta ya estaba asignada al chat'
+        : 'Etiqueta asignada exitosamente',
+      clientId,
+      chatId: chat.chatId,
+      phoneNumber: chat.phoneNumber,
+      tag: {
+        name: normalizedTagName,
+        color: existingTag?.color || ATTENTION_TAG_COLOR,
+        created: tagCreated,
+        alreadyAssigned: tagAlreadyAssigned
+      },
+      tags: chat.tags
+    });
+  } catch (error) {
+    console.error('Error marking chat for attention:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Error del servidor'
     });
   }
 };

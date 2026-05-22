@@ -142,7 +142,10 @@ app.post('/api/message-notification', authenticateN8N, async (req, res) => {
             sender: messageData.sender || 'user',
             content: messageData.content,
             timestamp: messageData.timestamp || new Date().toISOString(),
-            phoneNumber: messageData.phoneNumber
+            phoneNumber: messageData.phoneNumber,
+            mediaUrl: messageData.mediaUrl || null,
+            mediaType: messageData.mediaType || null,
+            fileName: messageData.fileName || null
         });
 
         res.json({

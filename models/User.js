@@ -1,6 +1,19 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const defaultFeatureFlags = {
+  data: true,
+  campaigns: true,
+  templates: true,
+  advisors: true,
+  advisorMetrics: true,
+  inscripciones: true,
+  metaEventos: true,
+  assistant: true,
+  conversationSummary: true,
+  sendTemplates: true,
+};
+
 const UserSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -41,6 +54,18 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: false,
     default: null,
+  },
+  featureFlags: {
+    data: { type: Boolean, default: defaultFeatureFlags.data },
+    campaigns: { type: Boolean, default: defaultFeatureFlags.campaigns },
+    templates: { type: Boolean, default: defaultFeatureFlags.templates },
+    advisors: { type: Boolean, default: defaultFeatureFlags.advisors },
+    advisorMetrics: { type: Boolean, default: defaultFeatureFlags.advisorMetrics },
+    inscripciones: { type: Boolean, default: defaultFeatureFlags.inscripciones },
+    metaEventos: { type: Boolean, default: defaultFeatureFlags.metaEventos },
+    assistant: { type: Boolean, default: defaultFeatureFlags.assistant },
+    conversationSummary: { type: Boolean, default: defaultFeatureFlags.conversationSummary },
+    sendTemplates: { type: Boolean, default: defaultFeatureFlags.sendTemplates },
   },
   createdAt: {
     type: Date,

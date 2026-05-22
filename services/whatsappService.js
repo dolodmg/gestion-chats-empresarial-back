@@ -97,8 +97,9 @@ class WhatsAppService {
    * @param {string} phoneNumber - Número de teléfono del destinatario
    * @param {string} imageUrl - URL de la imagen a enviar
    * @param {string} caption - Pie de foto opcional
+   * @param {string} caption - Pie de foto opcional
    */
-  static async sendImageMessage(clientId, phoneNumber, imageUrl, caption = '') {
+  static async sendImageMessage(clientId, phoneNumber, imageSource, caption = '') {
     try {
       // Obtener token del cliente desde la base de datos
       const token = await this.getClientToken(clientId);
@@ -109,6 +110,9 @@ class WhatsAppService {
       // Limpiar el número de teléfono
       const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
 
+      // Determinar si es una URL o un ID
+      const isUrl = imageSource.startsWith('http://') || imageSource.startsWith('https://');
+
       // Preparar el payload para mensaje con imagen
       const payload = {
         messaging_product: "whatsapp",
@@ -116,10 +120,15 @@ class WhatsAppService {
         to: cleanPhoneNumber,
         type: "image",
         image: {
-          link: imageUrl,
           caption: caption
         }
       };
+
+      if (isUrl) {
+        payload.image.link = imageSource;
+      } else {
+        payload.image.id = imageSource;
+      }
 
       console.log(`Enviando imagen WhatsApp desde cliente ${clientId} a ${cleanPhoneNumber}`);
 
@@ -140,6 +149,220 @@ class WhatsAppService {
 
     } catch (error) {
       console.error('Error al enviar imagen de WhatsApp:', error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Envía un documento a un número de WhatsApp
+   * @param {string} clientId - ID del cliente
+   * @param {string} phoneNumber - Número de teléfono del destinatario
+   * @param {string} mediaId - ID del media subido a Meta
+   * @param {string} fileName - Nombre del archivo
+   * @param {string} caption - Caption opcional
+   */
+  static async sendDocumentMessage(clientId, phoneNumber, mediaId, fileName, caption = '') {
+    try {
+      const token = await this.getClientToken(clientId);
+      const apiUrl = `https://graph.facebook.com/v22.0/${clientId}/messages`;
+      const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
+
+      const payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhoneNumber,
+        type: "document",
+        document: {
+          id: mediaId,
+          filename: fileName,
+          caption: caption
+        }
+      };
+
+      console.log(`Enviando documento WhatsApp desde cliente ${clientId} a ${cleanPhoneNumber}`);
+
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log('Documento enviado correctamente:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error al enviar documento de WhatsApp:', error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Envía un audio a un número de WhatsApp
+   * @param {string} clientId - ID del cliente
+   * @param {string} phoneNumber - Número de teléfono del destinatario
+   * @param {string} mediaId - ID del media subido a Meta
+   */
+  static async sendAudioMessage(clientId, phoneNumber, mediaId) {
+    try {
+      const token = await this.getClientToken(clientId);
+      const apiUrl = `https://graph.facebook.com/v22.0/${clientId}/messages`;
+      const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
+
+      const payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhoneNumber,
+        type: "audio",
+        audio: {
+          id: mediaId
+        }
+      };
+
+      console.log(`Enviando audio WhatsApp desde cliente ${clientId} a ${cleanPhoneNumber}`);
+
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log('Audio enviado correctamente:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error al enviar audio de WhatsApp:', error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Envía un video a un número de WhatsApp
+   * @param {string} clientId - ID del cliente
+   * @param {string} phoneNumber - Número de teléfono del destinatario
+   * @param {string} mediaId - ID del media subido a Meta
+   * @param {string} caption - Caption opcional
+   */
+  static async sendVideoMessage(clientId, phoneNumber, mediaId, caption = '') {
+    try {
+      const token = await this.getClientToken(clientId);
+      const apiUrl = `https://graph.facebook.com/v22.0/${clientId}/messages`;
+      const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
+
+      const payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhoneNumber,
+        type: "video",
+        video: {
+          id: mediaId,
+          caption: caption
+        }
+      };
+
+      console.log(`Enviando video WhatsApp desde cliente ${clientId} a ${cleanPhoneNumber}`);
+
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log('Video enviado correctamente:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error al enviar video de WhatsApp:', error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Sube un archivo a la API de Meta y devuelve el media_id
+   * @param {string} clientId - ID del cliente
+   * @param {Buffer} fileBuffer - Buffer del archivo
+   * @param {string} mimeType - MIME type del archivo
+   * @param {string} fileName - Nombre del archivo
+   * @returns {Promise<string>} - ID del media subido
+   */
+  static async uploadMedia(clientId, fileBuffer, mimeType, fileName) {
+    try {
+      const token = await this.getClientToken(clientId);
+      const apiUrl = `https://graph.facebook.com/v22.0/${clientId}/media`;
+
+      const FormData = require('form-data');
+      const formData = new FormData();
+      formData.append('file', fileBuffer, { filename: fileName, contentType: mimeType });
+      formData.append('messaging_product', 'whatsapp');
+      formData.append('type', mimeType);
+
+      console.log(`Subiendo media a Meta para cliente ${clientId}: ${fileName} (${mimeType})`);
+
+      const response = await axios.post(apiUrl, formData, {
+        headers: {
+          ...formData.getHeaders(),
+          'Authorization': `Bearer ${token}`
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
+      });
+
+      console.log('Media subido correctamente:', response.data);
+      return response.data.id; // media_id
+    } catch (error) {
+      console.error('Error al subir media a Meta:', error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Descarga un archivo de media desde la API de Meta (proxy)
+   * @param {string} clientId - ID del cliente
+   * @param {string} mediaUrl - URL del media en Meta
+   * @returns {Promise<{data: Buffer, contentType: string}>} - Buffer del archivo y su content type
+   */
+  static async downloadMedia(clientId, mediaUrl) {
+    try {
+      const token = await this.getClientToken(clientId);
+
+      console.log(`Descargando media desde: ${mediaUrl}`);
+
+      const response = await axios.get(mediaUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        responseType: 'arraybuffer'
+      });
+
+      return {
+        data: Buffer.from(response.data),
+        contentType: response.headers['content-type']
+      };
+    } catch (error) {
+      console.error('Error al descargar media de Meta:', error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene la URL de descarga de un media desde la API de Meta
+   * @param {string} clientId - ID del cliente
+   * @param {string} mediaId - ID del media en Meta
+   * @returns {Promise<string>} - URL de descarga del media
+   */
+  static async getMediaUrl(clientId, mediaId) {
+    try {
+      const token = await this.getClientToken(clientId);
+      const apiUrl = `https://graph.facebook.com/v22.0/${mediaId}`;
+
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      return response.data.url;
+    } catch (error) {
+      console.error('Error al obtener URL de media:', error.response ? error.response.data : error.message);
       throw error;
     }
   }

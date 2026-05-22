@@ -249,11 +249,14 @@ exports.getChat = async (req, res) => {
 
     console.log(`Buscando mensajes para chatId: ${chatId}, clientId: ${clientId}, role: ${req.user.role}`);
 
-    // Obtener mensajes del chat, filtrando mensajes con campos completos
+    // Obtener mensajes del chat (incluir mensajes con contenido O con media)
     const messages = await Message.find({
       chatId,
       clientId,
-      content: { $ne: null }
+      $or: [
+        { content: { $nin: [null, ''] } },
+        { mediaUrl: { $ne: null } }
+      ]
     }).sort({ timestamp: 1 });
 
     console.log(`Mensajes encontrados: ${messages.length}`);
@@ -482,6 +485,7 @@ exports.changeChatStatus = async (req, res) => {
     chat.statusChangeTime = status === 'human' ? new Date() : null;
     await chat.save();
 
+
     // Actualizar también el estado en ChatState
     try {
       if (typeof ChatState !== 'undefined' && ChatState) {
@@ -525,11 +529,11 @@ exports.changeChatStatus = async (req, res) => {
 // Enviar mensaje manual
 // Actualizar la función sendManualMessage en chatController.js
 
-// Enviar mensaje manual
+// Enviar mensaje manual (soporta texto y archivos)
 exports.sendManualMessage = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { content } = req.body;
+    const content = req.body.content || '';
     const clientId = req.user.role === 'admin'
       ? req.query.clientId
       : req.user.clientId;
@@ -540,8 +544,10 @@ exports.sendManualMessage = async (req, res) => {
       return res.status(400).json({ msg: 'Se requiere clientId' });
     }
 
-    if (!content) {
-      return res.status(400).json({ msg: 'El contenido del mensaje es requerido' });
+    // Verificar que hay contenido o archivo
+    const hasFile = req.file != null;
+    if (!content && !hasFile) {
+      return res.status(400).json({ msg: 'Se requiere contenido de texto o un archivo' });
     }
 
     // Verificar si el chat está en modo humano usando ChatState (si existe) o Chat
@@ -580,14 +586,53 @@ exports.sendManualMessage = async (req, res) => {
 
     const phoneNumber = chat ? chat.phoneNumber : chatId;
 
-    console.log(`Enviando mensaje a ${phoneNumber} desde cliente ${clientId}: ${content}`);
+    // Determinar tipo de media
+    let mediaUrl = null;
+    let mediaType = null;
+    let fileName = null;
+    let mimeType = null;
+    let mediaId = null;
+
+    if (hasFile) {
+      mimeType = req.file.mimetype;
+      fileName = req.file.originalname;
+
+      // Determinar mediaType basado en el mimeType
+      if (mimeType.startsWith('image/')) {
+        mediaType = 'image';
+      } else if (mimeType.startsWith('video/')) {
+        mediaType = 'video';
+      } else if (mimeType.startsWith('audio/')) {
+        mediaType = 'audio';
+      } else {
+        mediaType = 'document';
+      }
+
+      console.log(`Archivo adjunto: ${fileName} (${mimeType}) - Tipo: ${mediaType}`);
+
+      // Subir archivo a Meta
+      try {
+        mediaId = await WhatsAppService.uploadMedia(clientId, req.file.buffer, mimeType, fileName);
+        mediaUrl = `meta:${mediaId}`; // Guard reference to the Meta media ID
+        console.log(`Media subido a Meta con ID: ${mediaId}`);
+      } catch (uploadError) {
+        console.error('Error subiendo media a Meta:', uploadError);
+        return res.status(500).json({ msg: 'Error al subir archivo a WhatsApp', error: uploadError.message });
+      }
+    }
+
+    console.log(`Enviando mensaje a ${phoneNumber} desde cliente ${clientId}: ${content || '[archivo]'}`);
 
     // Crear el nuevo mensaje en la base de datos
     const newMessage = new Message({
       chatId,
       clientId,
       sender: 'bot', // Aunque es manual, para el usuario final viene del "bot"
-      content,
+      content: content || (fileName ? `📎 ${fileName}` : ''),
+      mediaUrl,
+      mediaType,
+      fileName,
+      mimeType,
       timestamp: new Date(),
       status: 'sent',
       phoneNumber
@@ -604,22 +649,46 @@ exports.sendManualMessage = async (req, res) => {
       content: newMessage.content,
       timestamp: newMessage.timestamp,
       id: newMessage._id,
-      phoneNumber: newMessage.phoneNumber
+      phoneNumber: newMessage.phoneNumber,
+      mediaUrl: newMessage.mediaUrl,
+      mediaType: newMessage.mediaType,
+      fileName: newMessage.fileName
     });
 
     // Enviar el mensaje usando WhatsAppService con clientId como primer parámetro
     try {
-      if (WhatsAppService && typeof WhatsAppService.sendTextMessage === 'function') {
-        // CORRECCIÓN: Pasar parámetros en el orden correcto (clientId, phoneNumber, content)
-        await WhatsAppService.sendTextMessage(clientId, phoneNumber, content);
-        console.log('Mensaje enviado a WhatsApp exitosamente');
+      if (hasFile && mediaId) {
+        // Enviar archivo según el tipo
+        switch (mediaType) {
+          case 'image':
+            // Para imágenes, usar directamente el ID del media subido
+            await WhatsAppService.sendImageMessage(clientId, phoneNumber, mediaId, content);
+            break;
+          case 'document':
+            await WhatsAppService.sendDocumentMessage(clientId, phoneNumber, mediaId, fileName, content);
+            break;
+          case 'audio':
+            await WhatsAppService.sendAudioMessage(clientId, phoneNumber, mediaId);
+            break;
+          case 'video':
+            await WhatsAppService.sendVideoMessage(clientId, phoneNumber, mediaId, content);
+            break;
+        }
+        console.log(`${mediaType} enviado a WhatsApp exitosamente`);
+      } else if (content) {
+        // Solo texto
+        if (WhatsAppService && typeof WhatsAppService.sendTextMessage === 'function') {
+          await WhatsAppService.sendTextMessage(clientId, phoneNumber, content);
+          console.log('Mensaje de texto enviado a WhatsApp exitosamente');
+        }
       }
     } catch (whatsappError) {
       console.error('Error enviando a WhatsApp:', whatsappError);
       console.error('Detalles del error:', {
         clientId,
         phoneNumber,
-        content: content.substring(0, 50) + '...',
+        content: (content || '').substring(0, 50) + '...',
+        mediaType,
         error: whatsappError.message
       });
 
@@ -631,8 +700,9 @@ exports.sendManualMessage = async (req, res) => {
     }
 
     // Actualizar información del chat si existe
+    const displayMessage = content || (fileName ? `📎 ${fileName}` : '[archivo]');
     if (chat) {
-      chat.lastMessage = content;
+      chat.lastMessage = displayMessage;
       chat.lastMessageTimestamp = new Date();
       await chat.save();
       console.log('Información del chat actualizada');
@@ -649,8 +719,6 @@ exports.sendManualMessage = async (req, res) => {
         statusChangeTime: chat.statusChangeTime
       });
     }
-
-
 
     // Actualizar el tiempo de control manual en ChatState o Chat
     if (chatState) {
@@ -672,7 +740,11 @@ exports.sendManualMessage = async (req, res) => {
         content: newMessage.content,
         timestamp: newMessage.timestamp,
         status: newMessage.status,
-        sender: newMessage.sender
+        sender: newMessage.sender,
+        mediaUrl: newMessage.mediaUrl,
+        mediaType: newMessage.mediaType,
+        fileName: newMessage.fileName,
+        mimeType: newMessage.mimeType
       }
     });
   } catch (error) {
@@ -680,6 +752,62 @@ exports.sendManualMessage = async (req, res) => {
     res.status(500).json({ msg: 'Error del servidor', error: error.message });
   }
 }
+
+// Proxy para descargar media de WhatsApp
+exports.getMedia = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const clientId = req.user.role === 'admin'
+      ? req.query.clientId
+      : req.user.clientId;
+
+    if (!clientId) {
+      return res.status(400).json({ msg: 'Se requiere clientId' });
+    }
+
+    // Buscar el mensaje
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ msg: 'Mensaje no encontrado' });
+    }
+
+    if (!message.mediaUrl) {
+      return res.status(404).json({ msg: 'Este mensaje no tiene archivo adjunto' });
+    }
+
+    // Si la mediaUrl es una referencia a Meta (meta:media_id)
+    if (message.mediaUrl.startsWith('meta:')) {
+      const mediaId = message.mediaUrl.replace('meta:', '');
+      try {
+        // Obtener la URL de descarga temporal de Meta
+        const downloadUrl = await WhatsAppService.getMediaUrl(clientId, mediaId);
+        // Descargar el archivo
+        const mediaData = await WhatsAppService.downloadMedia(clientId, downloadUrl);
+
+        res.set('Content-Type', mediaData.contentType);
+        res.set('Content-Disposition', `inline; filename="${message.fileName || 'file'}"`);
+        return res.send(mediaData.data);
+      } catch (downloadError) {
+        console.error('Error descargando media de Meta:', downloadError);
+        return res.status(500).json({ msg: 'Error al descargar archivo de WhatsApp' });
+      }
+    }
+
+    // Si la mediaUrl es una URL directa (de n8n u otra fuente)
+    try {
+      const mediaData = await WhatsAppService.downloadMedia(clientId, message.mediaUrl);
+      res.set('Content-Type', mediaData.contentType);
+      res.set('Content-Disposition', `inline; filename="${message.fileName || 'file'}"`);
+      return res.send(mediaData.data);
+    } catch (downloadError) {
+      console.error('Error descargando media:', downloadError);
+      return res.status(500).json({ msg: 'Error al descargar archivo' });
+    }
+  } catch (error) {
+    console.error('Error getting media:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};
 
 // Verificar el estado del chat (para n8n)
 exports.checkChatStatus = async (req, res) => {
@@ -894,7 +1022,16 @@ exports.assignChatToAdvisor = async (req, res) => {
     // Update the chat assignment
     chat.assignedAdvisorId = advisorId || null;
     chat.assignedAdvisorName = advisorName;
+    const advisorService = require('../services/advisorService');
+    await advisorService.removeAdvisorTagsFromChat(clientId, chat);
     await chat.save();
+    sseService.notifyChatUpdate({
+      chatId: chat.chatId,
+      clientId: chat.clientId,
+      assignedAdvisorId: chat.assignedAdvisorId,
+      assignedAdvisorName: chat.assignedAdvisorName
+    });
+
 
     console.log(`✅ Chat ${chatId} ${advisorId ? `asignado a ${advisorName}` : 'desasignado'}`);
 
@@ -1144,4 +1281,194 @@ exports.searchChats = async (req, res) => {
   }
 };
 
+// Eliminar un mensaje individual ("eliminar para mí")
+exports.deleteMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const clientId = req.user.role === 'admin'
+      ? req.query.clientId || req.body.clientId
+      : req.user.clientId;
 
+    if (!clientId) {
+      return res.status(400).json({ msg: 'Se requiere clientId' });
+    }
+
+    const message = await Message.findOne({ _id: messageId, clientId });
+
+    if (!message) {
+      return res.status(404).json({ msg: 'Mensaje no encontrado' });
+    }
+
+    await Message.deleteOne({ _id: messageId });
+
+    console.log(`🗑️ Mensaje eliminado: ${messageId}`);
+
+    res.json({ success: true, msg: 'Mensaje eliminado' });
+  } catch (error) {
+    console.error('Error al eliminar mensaje:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};
+
+// Eliminar un chat completo y todos sus mensajes
+exports.deleteChat = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const clientId = req.user.role === 'admin'
+      ? req.query.clientId || req.body.clientId
+      : req.user.clientId;
+
+    if (!clientId) {
+      return res.status(400).json({ msg: 'Se requiere clientId' });
+    }
+
+    // Eliminar todos los mensajes del chat
+    const messagesResult = await Message.deleteMany({ chatId, clientId });
+
+    // Eliminar el chat
+    const chatResult = await Chat.deleteOne({ chatId, clientId });
+
+    console.log(`🗑️ Chat eliminado: ${chatId} (${messagesResult.deletedCount} mensajes)`);
+
+    res.json({
+      success: true,
+      msg: 'Chat eliminado',
+      deletedMessages: messagesResult.deletedCount,
+      deletedChat: chatResult.deletedCount
+    });
+  } catch (error) {
+    console.error('Error al eliminar chat:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};
+
+// Búsqueda global de chats por número de teléfono (Solo Admin)
+exports.adminSearchChatsByPhone = async (req, res) => {
+  try {
+    const { phoneNumber } = req.query;
+
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ msg: 'No tienes permiso para buscar globalmente' });
+    }
+
+    if (!phoneNumber) {
+      return res.status(400).json({ msg: 'Se requiere phoneNumber' });
+    }
+
+    console.log(`Buscando chat globalmente por teléfono (Admin): ${phoneNumber}`);
+
+    // Normalizar el número de teléfono (eliminar espacios, guiones, paréntesis, etc.)
+    const normalizePhone = (phone) => {
+      if (!phone) return '';
+      return phone.toString().replace(/[\s\-\(\)\+\@A-Za-z]/g, '');
+    };
+
+    const normalizedInput = normalizePhone(phoneNumber);
+
+    // Buscar en la colección de mensajes (sin filtrar por clientId)
+    const chats = await Message.aggregate([
+      {
+        $match: {
+          chatId: { $ne: null },
+          // content: { $ne: null }
+        }
+      },
+      { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
+      {
+        $group: {
+          _id: { chatId: "$chatId", clientId: "$clientId" },
+          lastMessage: { $first: "$content" },
+          lastMessageTimestamp: { $first: "$timestamp" },
+          phoneNumber: { $first: "$phoneNumber" },
+          contactName: {
+            $first: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$contactName", null] },
+                    { $ne: ["$contactName", ""] },
+                    { $ne: ["$contactName", "Usuario Prueba"] }
+                  ]
+                },
+                "$contactName",
+                null
+              ]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          chatId: "$_id.chatId",
+          clientId: "$_id.clientId",
+          lastMessage: 1,
+          lastMessageTimestamp: 1,
+          phoneNumber: { $ifNull: ["$phoneNumber", "$_id.chatId"] },
+          contactName: { $ifNull: ["$contactName", "$_id.chatId"] }
+        }
+      }
+    ]);
+
+    // Filtrar chats que coincidan con el número normalizado (búsqueda parcial admitida)
+    const matchingChats = chats.filter((chat) => {
+      const normalizedChatPhone = normalizePhone(chat.phoneNumber);
+      if (!normalizedChatPhone) return false;
+      return normalizedChatPhone.includes(normalizedInput) ||
+        normalizedInput.includes(normalizedChatPhone);
+    });
+
+    if (!matchingChats.length) {
+      return res.json([]);
+    }
+
+    // Ordenar por fecha del último mensaje
+    matchingChats.sort((a, b) => {
+      const dateA = new Date(a.lastMessageTimestamp);
+      const dateB = new Date(b.lastMessageTimestamp);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    console.log(`Chats globales encontrados por teléfono: ${matchingChats.length}`);
+    res.json(matchingChats);
+  } catch (error) {
+    console.error('Error in adminSearchChatsByPhone:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};
+
+// Ver todos los mensajes de un chat global sin modificar su estado (Solo Admin)
+exports.adminGetGlobalChatMessages = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ msg: 'No tienes permiso para ver mensajes globales' });
+    }
+
+    const { clientId, chatId } = req.params;
+
+    if (!clientId || !chatId) {
+      return res.status(400).json({ msg: 'Se requieren clientId y chatId' });
+    }
+
+    console.log(`Buscando historial global (Admin): clientId=${clientId}, chatId=${chatId}`);
+
+    // Solo leer mensajes, sin marcar como leídos ni crear Chat documents para no alterar DB.
+    const messages = await Message.find({
+      chatId,
+      clientId,
+      $or: [
+        { content: { $nin: [null, ''] } },
+        { mediaUrl: { $ne: null } }
+      ]
+    }).sort({ timestamp: 1 });
+
+    res.json({
+      chatId,
+      clientId,
+      messages
+    });
+  } catch (error) {
+    console.error('Error in adminGetGlobalChatMessages:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+};

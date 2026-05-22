@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración del Asistente</title>
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/assistant.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-header">
+        <div class="header-logo-container">
+            <img src="assets/logo.png" class="header-logo">
+        </div>
+        <div class="actions">
+            <button id="back-btn" class="btn secondary-btn">Volver</button>
+            <button id="logout-btn" class="btn secondary-btn">Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <div class="assistant-container">
+        <div class="assistant-header">
+            <h2>Configuración del Asistente Virtual</h2>
+            <div class="header-actions">
+                <button id="history-btn" class="btn secondary-btn">Ver Historial</button>
+                <span id="version-info" class="version-info"></span>
+            </div>
+        </div>
+
+        <div id="loading-container" style="text-align: center; padding: 50px;">
+            <div class="loading-indicator"></div>
+            <p>Cargando configuración del asistente...</p>
+        </div>
+
+        <div id="prompt-container" style="display: none;">
+            <div class="prompt-editor">
+                <div class="editor-header">
+                    <label for="prompt-textarea">Prompt del Sistema</label>
+                    <div class="editor-actions">
+                        <span id="char-count" class="char-count">0 caracteres</span>
+                    </div>
+                </div>
+                <textarea id="prompt-textarea" placeholder="Cargando prompt..."></textarea>
+                
+                <div class="description-field">
+                    <label for="description-input">Descripción del cambio (opcional)</label>
+                    <input type="text" id="description-input" placeholder="Ej: Mejora en el tono de respuesta, actualización de información...">
+                </div>
+            </div>
+
+            <div class="button-container">
+                <button id="cancel-btn" class="btn cancel-btn">Cancelar</button>
+                <button id="save-btn" class="btn save-btn">Guardar Cambios</button>
+            </div>
+
+            <div id="status-message" class="status-message" style="display: none;"></div>
+
+            <div class="help-text">
+                <h3>Consejos para configurar el asistente</h3>
+                <p>Aquí puede editar el prompt base que utiliza el asistente virtual para responder a los mensajes de WhatsApp.</p>
+                <ul>
+                    <li>El prompt debe contener instrucciones claras sobre cómo debe comportarse el asistente</li>
+                    <li>Incluya información específica sobre su negocio, horarios, servicios, etc.</li>
+                    <li>Los cambios se aplicarán inmediatamente a todas las nuevas conversaciones</li>
+                    <li>Se guarda un historial de todos los cambios realizados</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div id="error-container" style="display: none; text-align: center; padding: 30px;">
+            <h3 style="color: #e74c3c;">Error al cargar el prompt</h3>
+            <p id="error-message" style="margin-top: 15px;"></p>
+            <button id="retry-btn" class="btn primary-btn" style="margin-top: 20px;">Reintentar</button>
+        </div>
+    </div>
+
+    <!-- Modal para el historial -->
+    <div id="history-modal" class="modal">
+        <div class="modal-content history-modal-content">
+            <span class="modal-close">&times;</span>
+            <h2>Historial de Prompts</h2>
+            
+            <div id="history-loading" style="text-align: center; padding: 20px;">
+                <div class="loading-indicator"></div>
+                <p>Cargando historial...</p>
+            </div>
+            
+            <div id="history-content" style="display: none;">
+                <div class="history-list" id="history-list">
+                    <!-- Los elementos del historial se cargarán aquí -->
+                </div>
+                
+                <div class="pagination" id="history-pagination">
+                    <!-- La paginación se generará aquí -->
+                </div>
+            </div>
+            
+            <div id="history-error" style="display: none; text-align: center; padding: 20px;">
+                <p style="color: #e74c3c;">Error al cargar el historial</p>
+                <button id="reload-history-btn" class="btn secondary-btn">Reintentar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmación para restaurar -->
+    <div id="restore-modal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <h3>¿Restaurar este prompt?</h3>
+            <p>Esto reemplazará el prompt actual con la versión seleccionada. El prompt actual se guardará en el historial.</p>
+            <div class="confirm-buttons">
+                <button id="restore-cancel" class="btn secondary-btn">Cancelar</button>
+                <button id="restore-confirm" class="btn primary-btn">Restaurar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/assistant.js"></script>
+    <script src="js/ui-effects.js"></script>
+</body>
+</html>

@@ -28,10 +28,35 @@ const PROVINCIAS_ARGENTINAS = [
   'tierra del fuego'
 ];
 
+const COURSE_2026_DEFINITIONS = [
+  { normalizedName: 'inteligencia artificial', displayName: 'Inteligencia Artificial', aliases: ['inteligencia artificial'] },
+  { normalizedName: 'de 0 a experto en marketing digital', displayName: 'De 0 a experto en marketing digital', aliases: ['de 0 a experto en marketing digital', 'de 0 a experto digital'] },
+  { normalizedName: 'ugc y marketing de contenidos', displayName: 'UGC y Marketing de contenidos', aliases: ['ugc y marketing de contenidos'] },
+  { normalizedName: 'como emprender desde la mirada del marketing', displayName: '¿Cómo Emprender desde la Mirada del Marketing?' },
+  { normalizedName: 'vendedor todoterreno', displayName: 'Vendedor Todoterreno' },
+  { normalizedName: 'diseno grafico', displayName: 'Diseño Gráfico' },
+  { normalizedName: 'mujeres que lideran', displayName: 'Mujeres que Lideran' },
+  { normalizedName: 'edicion de videos y reels', displayName: 'Edición de Videos y Reels' }
+];
+
+const COURSE_2026_ALIASES = {
+  'como emprender desde la mirada del marketing': [
+    'como emprender desde la mirada del marketing',
+    'como emprender desde la mirada marketing',
+    'emprender marketing'
+  ]
+};
+
+const EXACT_2026_COURSES = COURSE_2026_DEFINITIONS.flatMap((course) =>
+  COURSE_2026_ALIASES[course.normalizedName] || course.aliases || [course.normalizedName]
+);
+
+const COURSE_2026_SUFFIX = '__2026';
+
 // Configuración para normalización de cursos
 const COURSE_CONFIG = {
   // Normalizar nombres de cursos
-  normalize: function(courseName) {
+  normalize: function (courseName) {
     if (!courseName) return '';
     return courseName
       .toLowerCase()
@@ -51,67 +76,81 @@ const COURSE_CONFIG = {
       'ia',
       'artificial intelligence'
     ],
-    'de 0 a experto digital': [
+    'de 0 a experto en marketing digital': [
+      'de 0 a experto en marketing digital',
       'de 0 a experto digital',
       '0 a experto digital',
       'experto digital'
-    ],
-    'publicidad avanzada': [
-      'publicidad avanzada',
-      'marketing avanzado',
-      'publicidad'
-    ],
-    'oratoria y comunicacion efectiva': [
-      'oratoria y comunicacion efectiva',
-      'oratoria',
-      'comunicacion efectiva'
-    ],
-    'edicion de videos y reels': [
-      'edicion de videos y reels',
-      'edicion de video',
-      'video editing'
-    ],
-    'diseno grafico': [
-      'diseno grafico',
-      'diseño grafico',
-      'graphic design'
-    ],
-    'blockchain desde 0': [
-      'blockchain desde 0',
-      'blockchain',
-      'crypto'
-    ],
-    'asesoria de imagen': [
-      'asesoria de imagen',
-      'imagen personal'
-    ],
-    'finanzas personales desde 0': [
-      'finanzas personales desde 0',
-      'finanzas personales',
-      'finanzas'
     ],
     'ugc y marketing de contenidos': [
       'ugc y marketing de contenidos',
       'ugc',
       'marketing de contenidos'
     ],
+    'como emprender desde la mirada del marketing': [
+      '¿cómo emprender desde la mirada del marketing?',
+      'como emprender desde la mirada del marketing',
+      'emprender marketing'
+    ],
     'vendedor todoterreno': [
       'vendedor todoterreno',
       'ventas'
+    ],
+    'diseno grafico': [
+      'diseno grafico',
+      'diseño grafico',
+      'graphic design'
+    ],
+    'mujeres que lideran': [
+      'mujeres que lideran',
+      'lideran mujeres'
+    ],
+    'edicion de videos y reels': [
+      'edicion de videos y reels',
+      'edicion de video',
+      'video editing'
     ]
   },
 
   // Aplicar filtro de curso
-  applyFilter: function(query, courseFilter) {
+  applyFilter: function (query, courseFilter) {
     if (!courseFilter || courseFilter === 'todos') return;
 
+    if (courseFilter === 'otros__2026') {
+      const cutoffDate = new Date('2026-03-12T00:00:00.000Z');
+      query.$and = query.$and || [];
+      query.$and.push({
+        $expr: {
+          $not: {
+            $in: [
+              buildNormalizedCourseExpression(),
+              EXACT_2026_COURSES
+            ]
+          }
+        }
+      });
+      query.$and.push({ createdAt: { $gte: cutoffDate } });
+      return;
+    }
+
+    if (courseFilter.endsWith(COURSE_2026_SUFFIX)) {
+      const normalizedBaseFilter = courseFilter.slice(0, -COURSE_2026_SUFFIX.length);
+      const matchedAliases = COURSE_2026_ALIASES[normalizedBaseFilter] || [normalizedBaseFilter];
+      const cutoffDate = new Date('2026-03-12T00:00:00.000Z');
+
+      query.$and = query.$and || [];
+      query.$and.push(buildNormalizedCourseExactMatch(matchedAliases));
+      query.$and.push({ createdAt: { $gte: cutoffDate } });
+      return;
+    }
+
     const normalizedFilter = this.normalize(courseFilter);
-    
+
     // Buscar si corresponde a un grupo de variantes
     const variants = this.variants[normalizedFilter];
     if (variants) {
       // Crear regex para cada variante
-      const regexPatterns = variants.map(variant => 
+      const regexPatterns = variants.map(variant =>
         new RegExp(variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
       );
       query.curso = { $in: regexPatterns };
@@ -122,10 +161,106 @@ const COURSE_CONFIG = {
   }
 };
 
+function buildNormalizedCourseExpression() {
+  return {
+    $trim: {
+      input: {
+        $replaceAll: {
+          input: {
+            $replaceAll: {
+              input: {
+                $replaceAll: {
+                  input: {
+                    $replaceAll: {
+                      input: {
+                        $replaceAll: {
+                          input: {
+                            $replaceAll: {
+                              input: {
+                                $replaceAll: {
+                                  input: {
+                                    $replaceAll: {
+                                      input: {
+                                        $replaceAll: {
+                                          input: {
+                                            $replaceAll: {
+                                              input: { $toLower: '$curso' },
+                                              find: '\u00e1',
+                                              replacement: 'a'
+                                            }
+                                          },
+                                          find: '\u00e9',
+                                          replacement: 'e'
+                                        }
+                                      },
+                                      find: '\u00ed',
+                                      replacement: 'i'
+                                    }
+                                  },
+                                  find: '\u00f3',
+                                  replacement: 'o'
+                                }
+                              },
+                              find: '\u00fa',
+                              replacement: 'u'
+                            }
+                          },
+                          find: '\u00fc',
+                          replacement: 'u'
+                        }
+                      },
+                      find: '\u00f1',
+                      replacement: 'n'
+                    }
+                  },
+                  find: '?',
+                  replacement: ''
+                }
+              },
+              find: '\u00bf',
+              replacement: ''
+            }
+          },
+          find: '\u00a1',
+          replacement: ''
+        }
+      }
+    }
+  };
+}
+
+function buildNormalizedCourseExactMatch(courseNames) {
+  return {
+    $expr: {
+      $in: [
+        buildNormalizedCourseExpression(),
+        courseNames
+      ]
+    }
+  };
+}
+
+function applyCicloLectivoFilter(query, cicloLectivo) {
+  if (!cicloLectivo || cicloLectivo === 'todos') {
+    return query;
+  }
+
+  // Fecha de corte acordada: 12 de Marzo de 2026
+  const cutoffDate = new Date('2026-03-12T00:00:00.000Z');
+
+  if (cicloLectivo === '2026') {
+    query.createdAt = { $gte: cutoffDate };
+  } else if (cicloLectivo === '2025') {
+    query.createdAt = { $lt: cutoffDate };
+  }
+
+  return query;
+}
+
 // Verificar acceso a inscripciones
 function hasAccessToInscriptions(user) {
-  return user.clientId === '751524394719240' || 
-         (user.role === 'admin' && user.selectedClientId === '751524394719240');
+  return user.clientId === '751524394719240' ||
+    (user.role === 'admin' && user.selectedClientId === '751524394719240');
 }
 
 // ============================================================================
@@ -140,7 +275,7 @@ exports.getInscriptions = async (req, res) => {
       });
     }
 
-    const { dni, provincia, curso, page = 1, limit = 20 } = req.query;
+    const { dni, provincia, curso, cicloLectivo, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
     let query = {};
@@ -153,7 +288,7 @@ exports.getInscriptions = async (req, res) => {
     // Filtro por provincia
     if (provincia && provincia !== 'todas') {
       const provinciaDecoded = decodeURIComponent(provincia).toLowerCase().trim();
-      
+
       if (provinciaDecoded === 'otros') {
         query.provincia = { $nin: PROVINCIAS_ARGENTINAS };
       } else {
@@ -163,6 +298,8 @@ exports.getInscriptions = async (req, res) => {
 
     // Filtro por curso (con normalización)
     COURSE_CONFIG.applyFilter(query, curso);
+
+    query = applyCicloLectivoFilter(query, cicloLectivo);
 
     console.log('Query de búsqueda:', JSON.stringify(query, null, 2));
 
@@ -207,7 +344,7 @@ exports.exportInscriptionsCSV = async (req, res) => {
       });
     }
 
-    const { dni, provincia, curso } = req.query;
+    const { dni, provincia, curso, cicloLectivo } = req.query;
     let query = {};
 
     // Aplicar los mismos filtros que getInscriptions
@@ -217,7 +354,7 @@ exports.exportInscriptionsCSV = async (req, res) => {
 
     if (provincia && provincia !== 'todas') {
       const provinciaDecoded = decodeURIComponent(provincia).toLowerCase().trim();
-      
+
       if (provinciaDecoded === 'otros') {
         query.provincia = { $nin: PROVINCIAS_ARGENTINAS };
       } else {
@@ -226,6 +363,8 @@ exports.exportInscriptionsCSV = async (req, res) => {
     }
 
     COURSE_CONFIG.applyFilter(query, curso);
+
+    query = applyCicloLectivoFilter(query, cicloLectivo);
 
     console.log('Query de exportación CSV:', JSON.stringify(query, null, 2));
 
@@ -237,7 +376,7 @@ exports.exportInscriptionsCSV = async (req, res) => {
     // Headers CSV
     const headers = [
       'DNI/ID',
-      'Nombre Completo', 
+      'Nombre Completo',
       'Curso',
       'Correo',
       'Provincia/Estado',
@@ -251,7 +390,7 @@ exports.exportInscriptionsCSV = async (req, res) => {
 
     inscriptions.forEach(inscription => {
       const fecha = new Date(inscription.createdAt).toLocaleDateString('es-ES');
-      
+
       const row = [
         `"${inscription.dni || ''}"`,
         `"${inscription.nombreCompleto || ''}"`,
@@ -262,7 +401,7 @@ exports.exportInscriptionsCSV = async (req, res) => {
         `"${inscription.codigoPostal || ''}"`,
         `"${fecha}"`
       ];
-      
+
       csvContent += row.join(',') + '\n';
     });
 
@@ -270,7 +409,7 @@ exports.exportInscriptionsCSV = async (req, res) => {
     const now = new Date();
     const timestamp = now.toISOString().slice(0, 10); // YYYY-MM-DD
     let filename = `inscripciones_${timestamp}`;
-    
+
     if (provincia && provincia !== 'todas') {
       filename += `_${provincia.replace(/\s+/g, '_')}`;
     }
@@ -280,13 +419,13 @@ exports.exportInscriptionsCSV = async (req, res) => {
     if (dni) {
       filename += `_dni_${dni}`;
     }
-    
+
     filename += '.csv';
 
     // Configurar respuesta
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    
+
     // BOM para UTF-8 (para Excel)
     res.write('\ufeff');
     res.write(csvContent);
@@ -314,64 +453,68 @@ exports.getCourses = async (req, res) => {
       });
     }
 
-    // Obtener todos los cursos únicos
-    const allCourses = await Inscription.aggregate([
-      { $group: { _id: '$curso', count: { $sum: 1 } } }
+    const exact2026Counts = await Inscription.aggregate([
+      {
+        $project: {
+          normalizedCourse: buildNormalizedCourseExpression(),
+          createdAt: 1
+        }
+      },
+      {
+        $match: {
+          normalizedCourse: { $in: EXACT_2026_COURSES },
+          createdAt: { $gte: new Date('2026-03-12T00:00:00.000Z') }
+        }
+      },
+      {
+        $group: {
+          _id: '$normalizedCourse',
+          count: { $sum: 1 }
+        }
+      }
     ]);
 
-    console.log('Cursos encontrados en BD:', allCourses.map(c => c._id));
+    const countsByCourse = exact2026Counts.reduce((acc, course) => {
+      acc[course._id] = course.count;
+      return acc;
+    }, {});
 
-    // Agrupar cursos por versión normalizada
-    const groupedCourses = {};
+    const courses = COURSE_2026_DEFINITIONS.map((course2026) => {
+      const aliases = COURSE_2026_ALIASES[course2026.normalizedName] || [course2026.normalizedName];
+      const count = aliases.reduce((total, alias) => total + (countsByCourse[alias] || 0), 0);
 
-    allCourses.forEach(course => {
-      const originalName = course._id;
-      const normalizedName = COURSE_CONFIG.normalize(originalName);
-      
-      // Buscar el grupo al que pertenece
-      let groupKey = null;
-      let displayName = originalName;
-
-      // Buscar en variantes definidas
-      for (const [mainName, variants] of Object.entries(COURSE_CONFIG.variants)) {
-        const normalizedVariants = variants.map(v => COURSE_CONFIG.normalize(v));
-        if (normalizedVariants.includes(normalizedName)) {
-          groupKey = mainName;
-          displayName = variants[0]; // Nombre preferido
-          break;
-        }
-      }
-
-      // Si no encontró grupo, crear uno nuevo
-      if (!groupKey) {
-        groupKey = normalizedName;
-        displayName = originalName;
-      }
-
-      // Agrupar contadores
-      if (groupedCourses[groupKey]) {
-        groupedCourses[groupKey].count += course.count;
-        // Usar el nombre más corto y limpio
-        if (displayName.length < groupedCourses[groupKey].displayName.length) {
-          groupedCourses[groupKey].displayName = displayName;
-        }
-      } else {
-        groupedCourses[groupKey] = {
-          displayName: displayName,
-          normalizedKey: groupKey,
-          count: course.count
-        };
-      }
+      return {
+        name: `${course2026.displayName} 2026`,
+        normalizedName: `${course2026.normalizedName}${COURSE_2026_SUFFIX}`,
+        count
+      };
     });
 
-    // Convertir a array y ordenar por cantidad
-    const courses = Object.values(groupedCourses)
-      .map(course => ({
-        name: course.displayName,
-        normalizedName: course.normalizedKey,
-        count: course.count
-      }))
-      .sort((a, b) => b.count - a.count);
+    const otros2026Count = await Inscription.aggregate([
+      {
+        $project: {
+          normalizedCourse: buildNormalizedCourseExpression(),
+          createdAt: 1
+        }
+      },
+      {
+        $match: {
+          normalizedCourse: { $nin: EXACT_2026_COURSES },
+          createdAt: { $gte: new Date('2026-03-12T00:00:00.000Z') }
+        }
+      },
+      {
+        $count: "total"
+      }
+    ]);
+
+    const otrosCount = otros2026Count.length > 0 ? otros2026Count[0].total : 0;
+
+    courses.push({
+      name: 'Otros cursos 2026',
+      normalizedName: 'otros__2026',
+      count: otrosCount
+    });
 
     console.log('Cursos agrupados:', courses);
 
@@ -389,80 +532,83 @@ exports.getCourses = async (req, res) => {
   }
 };
 
+// Lógica interna para guardar una inscripción (usada por API manual y n8n)
+async function _saveInscriptionInternal(data) {
+  const { dni, nombreCompleto, curso, correo, provincia, localidad, codigoPostal, fecha, createdAt } = data;
+
+  // Normalizar provincia
+  const provinciaLimpia = (provincia || '')
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+
+  const VARIANTES_PROVINCIAS = {
+    'bs as': 'buenos aires',
+    'bsas': 'buenos aires',
+    'provincia de buenos aires': 'buenos aires',
+    'pba': 'buenos aires',
+    'capital': 'caba',
+    'capital federal': 'caba',
+    'ciudad autonoma de buenos aires': 'caba'
+  };
+
+  let provinciaFinal;
+  if (PROVINCIAS_ARGENTINAS.includes(provinciaLimpia)) {
+    provinciaFinal = provinciaLimpia;
+  } else if (VARIANTES_PROVINCIAS[provinciaLimpia]) {
+    provinciaFinal = VARIANTES_PROVINCIAS[provinciaLimpia];
+  } else {
+    provinciaFinal = (provincia || 'Desconocida').trim();
+  }
+
+  let finalCreatedAt;
+  if (createdAt) {
+    finalCreatedAt = new Date(createdAt);
+  } else if (fecha) {
+    finalCreatedAt = new Date(fecha);
+  }
+
+  const inscriptionData = {
+    dni: dni.toString(),
+    nombreCompleto,
+    curso,
+    correo: correo || '-',
+    provincia: provinciaFinal,
+    localidad: localidad || '-',
+    codigoPostal: codigoPostal || '-'
+  };
+
+  if (finalCreatedAt && !isNaN(finalCreatedAt.getTime())) {
+    inscriptionData.createdAt = finalCreatedAt;
+  }
+
+  const inscription = new Inscription(inscriptionData);
+  await inscription.save();
+  return inscription;
+}
+
 // ============================================================================
-// CREAR NUEVA INSCRIPCIÓN
+// CREAR NUEVA INSCRIPCIÓN (API MANUAL)
 // ============================================================================
 exports.createInscription = async (req, res) => {
   try {
-    const { dni, nombreCompleto, curso, correo, provincia, localidad, codigoPostal } = req.body;
+    const { dni, nombreCompleto, curso } = req.body;
 
-    if (!dni || !nombreCompleto || !curso || !correo || !provincia || !localidad || !codigoPostal) {
+    if (!dni || !nombreCompleto || !curso) {
       return res.status(400).json({
         success: false,
-        error: 'Todos los campos son requeridos'
+        error: 'DNI, Nombre Completo y Curso son requeridos'
       });
     }
 
-    console.log('=== CREANDO INSCRIPCIÓN ===');
-    console.log('Datos recibidos:', { dni, nombreCompleto, curso, correo, provincia, localidad, codigoPostal });
-
-    // Normalizar provincia
-    const provinciaLimpia = provincia
-      .toLowerCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, ' ');
-
-    // Mapeo de variantes de provincias
-    const VARIANTES_PROVINCIAS = {
-      'bs as': 'buenos aires',
-      'bsas': 'buenos aires',
-      'provincia de buenos aires': 'buenos aires',
-      'pba': 'buenos aires',
-      'capital': 'caba',
-      'capital federal': 'caba',
-      'ciudad autonoma de buenos aires': 'caba'
-    };
-
-    // Determinar provincia final
-    let provinciaFinal;
-    
-    if (PROVINCIAS_ARGENTINAS.includes(provinciaLimpia)) {
-      provinciaFinal = provinciaLimpia;
-    } else if (VARIANTES_PROVINCIAS[provinciaLimpia]) {
-      provinciaFinal = VARIANTES_PROVINCIAS[provinciaLimpia];
-    } else {
-      provinciaFinal = provincia.trim(); // Mantener original para extranjeras
-    }
-
-    // Crear inscripción
-    const inscriptionData = {
-      dni,
-      nombreCompleto,
-      curso,
-      correo,
-      provincia: provinciaFinal,
-      localidad,
-      codigoPostal
-    };
-
-    const inscription = new Inscription(inscriptionData);
-    await inscription.save();
-
-    console.log('✅ Inscripción creada exitosamente');
+    const inscription = await _saveInscriptionInternal(req.body);
 
     res.json({
       success: true,
       message: 'Inscripción creada correctamente',
-      inscription: {
-        ...inscription.toObject(),
-        _debugInfo: {
-          provinciaRecibida: provincia,
-          provinciaFinal,
-          esArgentina: PROVINCIAS_ARGENTINAS.includes(provinciaLimpia) || !!VARIANTES_PROVINCIAS[provinciaLimpia]
-        }
-      }
+      inscription
     });
 
   } catch (error) {
@@ -470,6 +616,97 @@ exports.createInscription = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Error del servidor al crear inscripción',
+      details: error.message
+    });
+  }
+};
+
+// ============================================================================
+// CREAR INSCRIPCIÓN DESDE N8N (MAPEANDO ID DE CURSO)
+// ============================================================================
+exports.createInscriptionFromN8N = async (req, res) => {
+  try {
+    const { dni, nombreCompleto, cursoId, curso, correo, provincia, localidad, codigoPostal, fecha, createdAt } = req.body;
+
+    if (!dni || !nombreCompleto || (!cursoId && !curso)) {
+      return res.status(400).json({
+        success: false,
+        error: 'DNI, Nombre Completo y curso o cursoId son requeridos'
+      });
+    }
+
+    const CURSOS_MAP = {
+      1: 'Inteligencia Artificial',
+      2: 'De 0 a experto en marketing digital',
+      3: 'UGC y Marketing de contenidos',
+      4: '¿Cómo emprender desde la mirada del marketing?',
+      5: 'Vendedor todoterreno',
+      6: 'Diseño gráfico',
+      7: 'Mujeres que lideran',
+      8: 'Edición de videos y reels'
+    };
+
+    // Normalizar cursoId para que siempre sea un array
+    let idsToProcess = [];
+    if (cursoId) {
+      if (Array.isArray(cursoId)) {
+        idsToProcess = cursoId;
+      } else if (typeof cursoId === 'string') {
+        idsToProcess = cursoId.split(',').map(id => id.trim());
+      } else {
+        idsToProcess = [cursoId];
+      }
+    }
+
+    // Si no hay cursoId, pero hay curso literal, lo ponemos en una lista de 1
+    let coursesToProcess = [];
+    if (idsToProcess.length > 0) {
+      coursesToProcess = idsToProcess.map(id => CURSOS_MAP[parseInt(id)] || `Curso ID ${id}`).filter(c => c);
+    } else if (curso) {
+      coursesToProcess = Array.isArray(curso) ? curso : [curso];
+    }
+
+    if (coursesToProcess.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se pudieron identificar los cursos'
+      });
+    }
+
+    console.log(`=== CREANDO ${coursesToProcess.length} INSCRIPCIONES DESDE N8N ===`);
+
+    const results = [];
+    for (const cursoName of coursesToProcess) {
+      try {
+        const ins = await _saveInscriptionInternal({
+          dni,
+          nombreCompleto,
+          curso: cursoName,
+          correo: correo || '-',
+          provincia,
+          localidad,
+          codigoPostal,
+          fecha,
+          createdAt
+        });
+        results.push({ curso: cursoName, success: true, id: ins._id });
+      } catch (err) {
+        console.error(`Error inscribiendo en ${cursoName}:`, err);
+        results.push({ curso: cursoName, success: false, error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Se procesaron ${coursesToProcess.length} inscripciones`,
+      results
+    });
+
+  } catch (error) {
+    console.error('❌ Error guardando inscripciones de n8n:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error procesando solicitud de n8n',
       details: error.message
     });
   }
@@ -533,7 +770,7 @@ exports.getInscriptionStats = async (req, res) => {
     }
 
     const total = await Inscription.countDocuments();
-    
+
     const byProvince = await Inscription.aggregate([
       { $group: { _id: '$provincia', count: { $sum: 1 } } },
       { $sort: { count: -1 } }

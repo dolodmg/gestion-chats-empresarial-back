@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
+const Advisor = require('../models/Advisor');
 const bcrypt = require('bcryptjs');
 
 // Registro de usuario
@@ -14,6 +15,26 @@ router.post('/login', authController.login);
 // Obtener usuario autenticado
 router.get('/', auth, async (req, res) => {
   try {
+    if (req.user.role === 'advisor') {
+      const advisor = await Advisor.findById(req.user.id).select('-password');
+      if (!advisor) {
+        return res.status(404).json({ msg: 'Usuario no encontrado' });
+      }
+
+      const clientUser = await User.findOne({ clientId: advisor.clientId, role: 'client' }).select('featureFlags');
+
+      return res.json({
+        _id: advisor._id,
+        id: advisor.id,
+        name: advisor.name,
+        email: advisor.email,
+        role: 'advisor',
+        clientId: advisor.clientId,
+        advisorId: advisor.id,
+        featureFlags: clientUser?.featureFlags
+      });
+    }
+
     const user = await User.findById(req.user.id).select('-password');
     res.json(user);
   } catch (error) {

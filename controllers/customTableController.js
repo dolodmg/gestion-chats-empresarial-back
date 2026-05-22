@@ -506,7 +506,8 @@ exports.createTableRecord = async (req, res) => {
             await advisorService.assignAdvisorToChat(
               customTable.clientId,
               recordData[phoneField.name],
-              advisor
+              advisor,
+              { forceAssignment: true }
             );
           }
         }
@@ -606,6 +607,27 @@ exports.updateTableRecord = async (req, res) => {
     }
 
     console.log(`✅ Registro actualizado correctamente: ${recordId}`);
+
+    try {
+      const advisorService = require('../services/advisorService');
+      const phoneField = customTable.fields.find(f =>
+        advisorService.isPhoneField(f.name)
+      );
+
+      if (phoneField && updatedRecord[phoneField.name] && updatedRecord.assignedAdvisorName) {
+        await advisorService.assignAdvisorToChat(
+          customTable.clientId,
+          updatedRecord[phoneField.name],
+          {
+            _id: updatedRecord.assignedAdvisorId,
+            name: updatedRecord.assignedAdvisorName
+          },
+          { forceAssignment: true }
+        );
+      }
+    } catch (advisorSyncError) {
+      console.error('âš ï¸ Error sincronizando asesor/tag en chat tras actualizaciÃ³n:', advisorSyncError);
+    }
 
     res.json({
       success: true,

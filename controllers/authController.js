@@ -3,6 +3,15 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Advisor = require('../models/Advisor');
 
+async function getClientFeatureFlags(clientId) {
+  if (!clientId) {
+    return undefined;
+  }
+
+  const clientUser = await User.findOne({ clientId, role: 'client' }).select('featureFlags');
+  return clientUser?.featureFlags;
+}
+
 // Registro de usuario
 exports.register = async (req, res) => {
   try {
@@ -85,6 +94,8 @@ exports.login = async (req, res) => {
     let payload, userResponse;
 
     if (isAdvisor) {
+      const featureFlags = await getClientFeatureFlags(advisor.clientId);
+
       payload = {
         user: {
           id: advisor.id,
@@ -100,7 +111,8 @@ exports.login = async (req, res) => {
         email: advisor.email,
         role: 'advisor',
         clientId: advisor.clientId,
-        advisorId: advisor.id
+        advisorId: advisor.id,
+        featureFlags
       };
     } else {
       payload = {
@@ -117,6 +129,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         clientId: user.clientId,
+        featureFlags: user.featureFlags,
       };
     }
 

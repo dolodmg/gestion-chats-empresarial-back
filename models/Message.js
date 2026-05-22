@@ -18,7 +18,7 @@ const MessageSchema = new mongoose.Schema({
   },
   content: {
     type: String,
-    required: true,
+    default: '',
   },
   mediaUrl: {
     type: String,
@@ -27,6 +27,14 @@ const MessageSchema = new mongoose.Schema({
   mediaType: {
     type: String,
     enum: ['image', 'video', 'audio', 'document', null],
+    default: null,
+  },
+  fileName: {
+    type: String,
+    default: null,
+  },
+  mimeType: {
+    type: String,
     default: null,
   },
   timestamp: {

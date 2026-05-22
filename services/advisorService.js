@@ -2,6 +2,8 @@ const Advisor = require('../models/Advisor');
 const AdvisorConfig = require('../models/AdvisorConfig');
 const AdvisorTableAssignment = require('../models/AdvisorTableAssignment');
 const Chat = require('../models/Chat');
+const RoundRobinState = require('../models/RoundRobinState');
+const sseService = require('./sseService');
 
 /**
  * Obtener o crear configuración de asesores para un cliente
@@ -30,13 +32,11 @@ async function isModuleEnabled(clientId) {
  */
 async function getNextAdvisorForTable(clientId, tableId) {
     try {
-        // Verificar si el módulo está habilitado
         const enabled = await isModuleEnabled(clientId);
         if (!enabled) {
             return null;
         }
 
-        // Obtener asignaciones de asesores para esta tabla, ordenadas por posición
         const assignments = await AdvisorTableAssignment.find({
             clientId,
             tableId
@@ -49,7 +49,6 @@ async function getNextAdvisorForTable(clientId, tableId) {
             return null;
         }
 
-        // Filtrar solo asesores activos
         const activeAssignments = assignments.filter(a =>
             a.advisorId && a.advisorId.active
         );
@@ -59,16 +58,11 @@ async function getNextAdvisorForTable(clientId, tableId) {
             return null;
         }
 
-        // Obtener el índice del último asesor asignado para esta tabla
         const lastIndex = await getLastAssignmentIndex(tableId);
-
-        // Calcular el siguiente índice (round-robin circular)
         const nextIndex = (lastIndex + 1) % activeAssignments.length;
 
-        // Actualizar el índice para la próxima asignación
         await updateLastAssignmentIndex(tableId, nextIndex);
 
-        // Retornar el asesor correspondiente
         const selectedAdvisor = activeAssignments[nextIndex].advisorId;
 
         console.log(`Asesor asignado: ${selectedAdvisor.name} (índice ${nextIndex}/${activeAssignments.length})`);
@@ -85,11 +79,9 @@ async function getNextAdvisorForTable(clientId, tableId) {
  * Obtener el índice del último asesor asignado para una tabla
  * Usa una colección auxiliar para trackear el estado del round-robin
  */
-const RoundRobinState = require('../models/RoundRobinState');
-
 async function getLastAssignmentIndex(tableId) {
     const state = await RoundRobinState.findOne({ tableId });
-    return state ? state.lastIndex : -1; // -1 para que el primero sea 0
+    return state ? state.lastIndex : -1;
 }
 
 /**
@@ -103,29 +95,76 @@ async function updateLastAssignmentIndex(tableId, index) {
     );
 }
 
+function normalizePhoneNumber(phoneNumber) {
+    return String(phoneNumber || '').replace(/\D/g, '');
+}
+
+async function findChatByPhoneNumber(clientId, phoneNumber) {
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+
+    if (!normalizedPhone) {
+        return null;
+    }
+
+    return Chat.findOne({
+        clientId,
+        $or: [
+            { chatId: `${normalizedPhone}@c.us` },
+            { phoneNumber: phoneNumber },
+            { phoneNumber: normalizedPhone }
+        ]
+    });
+}
+
+async function removeAdvisorTagsFromChat(clientId, chat) {
+    if (!chat || !Array.isArray(chat.tags) || chat.tags.length === 0) {
+        return chat;
+    }
+
+    const advisors = await Advisor.find({ clientId }).select('name').lean();
+    const advisorNames = new Set(
+        advisors
+            .map(advisor => String(advisor.name || '').trim().toLowerCase())
+            .filter(Boolean)
+    );
+
+    chat.tags = chat.tags.filter(tag => !advisorNames.has(String(tag || '').trim().toLowerCase()));
+    return chat;
+}
+
 /**
  * Asignar asesor a un chat de WhatsApp
  */
-async function assignAdvisorToChat(clientId, phoneNumber, advisor) {
+async function assignAdvisorToChat(clientId, phoneNumber, advisor, options = {}) {
     try {
         if (!advisor) return;
 
-        // Buscar el chat por número de teléfono
-        const chatId = `${phoneNumber.replace(/\D/g, '')}@c.us`;
-
-        const chat = await Chat.findOne({ chatId, clientId });
+        const { forceAssignment = false } = options;
+        const chat = await findChatByPhoneNumber(clientId, phoneNumber);
 
         if (chat) {
-            // Solo asignar si no tiene asesor ya asignado
-            if (!chat.assignedAdvisorId) {
+            await removeAdvisorTagsFromChat(clientId, chat);
+
+            const shouldAssignAdvisor =
+                forceAssignment ||
+                !chat.assignedAdvisorId ||
+                chat.assignedAdvisorId.toString() !== String(advisor._id);
+
+            if (shouldAssignAdvisor) {
                 chat.assignedAdvisorId = advisor._id;
                 chat.assignedAdvisorName = advisor.name;
                 await chat.save();
-
-                console.log(`Asesor ${advisor.name} asignado al chat ${chatId}`);
+                sseService.notifyChatUpdate({
+                    chatId: chat.chatId,
+                    clientId: chat.clientId,
+                    assignedAdvisorId: chat.assignedAdvisorId,
+                    assignedAdvisorName: chat.assignedAdvisorName
+                });
+                console.log(`Asesor ${advisor.name} asignado al chat ${chat.chatId}`);
             }
         } else {
-            console.log(`Chat ${chatId} no encontrado para asignar asesor`);
+            const normalizedPhone = normalizePhoneNumber(phoneNumber);
+            console.log(`Chat ${normalizedPhone}@c.us no encontrado para asignar asesor`);
         }
     } catch (error) {
         console.error('Error asignando asesor a chat:', error);
@@ -146,5 +185,7 @@ module.exports = {
     isModuleEnabled,
     getNextAdvisorForTable,
     assignAdvisorToChat,
-    isPhoneField
+    isPhoneField,
+    findChatByPhoneNumber,
+    removeAdvisorTagsFromChat
 };

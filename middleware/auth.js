@@ -2,8 +2,8 @@ const jwt = require('jsonwebtoken');
 
 module.exports = (req, res, next) => {
   try {
-    // Obtener token del header
-    const token = req.header('x-auth-token');
+    // Obtener token del header o query parameter (para media proxy)
+    const token = req.header('x-auth-token') || req.query.token;
 
     // Verificar si no hay token
     if (!token) {
@@ -17,12 +17,12 @@ module.exports = (req, res, next) => {
       next();
     } catch (err) {
       console.error('Error al verificar token:', err.message);
-      
+
       // Verificar si el error es por expiración
       if (err.name === 'TokenExpiredError') {
         return res.status(401).json({ msg: 'Token expirado, por favor inicie sesión nuevamente' });
       }
-      
+
       // Otros errores de verificación
       return res.status(401).json({ msg: 'Token no válido' });
     }
