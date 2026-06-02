@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Message = require('../models/Message');
 const { serializeUser } = require('../utils/userResponse');
+const { logAction } = require('../services/auditService');
 const ARGENTINA_UTC_OFFSET = '-03:00';
 const FEATURE_FLAG_KEYS = [
   'data',
@@ -112,6 +113,21 @@ exports.createUser = async (req, res) => {
     });
 
     await user.save();
+
+    void logAction({
+      req,
+      clientId: user.clientId || null,
+      action: 'user.created',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        role: user.role,
+        email: user.email,
+        workflowId: user.workflowId || null,
+        hasWhatsappToken: Boolean(user.whatsappToken),
+        wabaId: user.wabaId || null
+      }
+    });
 
     res.json({
       msg: 'Usuario creado correctamente',
@@ -273,6 +289,22 @@ exports.updateUser = async (req, res) => {
       { new: true }
     ).select('-password');
 
+    void logAction({
+      req,
+      clientId: user.clientId || null,
+      action: 'user.updated',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        updatedFields: Object.keys(userFields),
+        role: user.role,
+        email: user.email,
+        workflowId: user.workflowId || null,
+        hasWhatsappToken: Boolean(user.whatsappToken),
+        wabaId: user.wabaId || null
+      }
+    });
+
     res.json(serializeUser(user));
   } catch (error) {
     console.error('Error updating user:', error);
@@ -294,6 +326,18 @@ exports.deleteUser = async (req, res) => {
     }
 
     await User.findByIdAndDelete(req.params.id);
+
+    void logAction({
+      req,
+      clientId: user.clientId || null,
+      action: 'user.deleted',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        role: user.role,
+        email: user.email
+      }
+    });
 
     res.json({ msg: 'Usuario eliminado correctamente' });
   } catch (error) {

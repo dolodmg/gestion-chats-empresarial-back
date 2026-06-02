@@ -7,6 +7,7 @@ const Advisor = require('../models/Advisor');
 const bcrypt = require('bcryptjs');
 const { createBrowserToken } = require('../utils/browserToken');
 const { serializeUser } = require('../utils/userResponse');
+const { logAction } = require('../services/auditService');
 
 // Registro de usuario
 router.post('/register', authController.register);
@@ -53,13 +54,26 @@ router.get('/browser-token', auth, async (req, res) => {
         return res.status(404).json({ msg: 'Usuario no encontrado' });
       }
 
+      const browserToken = createBrowserToken({
+        id: advisor.id,
+        role: 'advisor',
+        clientId: advisor.clientId,
+        advisorId: advisor.id
+      });
+
+      void logAction({
+        req,
+        action: 'auth.browser_token.issued',
+        targetType: 'advisor',
+        targetId: advisor.id,
+        clientId: advisor.clientId,
+        metadata: {
+          role: 'advisor'
+        }
+      });
+
       return res.json({
-        browserToken: createBrowserToken({
-          id: advisor.id,
-          role: 'advisor',
-          clientId: advisor.clientId,
-          advisorId: advisor.id
-        })
+        browserToken
       });
     }
 
@@ -68,8 +82,20 @@ router.get('/browser-token', auth, async (req, res) => {
       return res.status(404).json({ msg: 'Usuario no encontrado' });
     }
 
+    const browserToken = createBrowserToken(user);
+    void logAction({
+      req,
+      action: 'auth.browser_token.issued',
+      targetType: 'user',
+      targetId: req.user.id,
+      clientId: req.user.clientId || null,
+      metadata: {
+        role: req.user.role
+      }
+    });
+
     return res.json({
-      browserToken: createBrowserToken(user)
+      browserToken
     });
   } catch (error) {
     console.error('Error creating browser token:', error);
@@ -120,6 +146,16 @@ router.post('/change-password', auth, async (req, res) => {
     }
 
     console.log('Contraseña actualizada correctamente para usuario:', user.email);
+    void logAction({
+      req,
+      action: 'auth.password.changed',
+      targetType: 'user',
+      targetId: req.user.id,
+      clientId: req.user.clientId || null,
+      metadata: {
+        email: user.email
+      }
+    });
     res.json({ msg: 'Contraseña actualizada correctamente' });
   } catch (error) {
     console.error('Error cambiando contraseña:', error);

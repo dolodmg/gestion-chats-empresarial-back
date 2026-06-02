@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Advisor = require('../models/Advisor');
+const { logAction } = require('../services/auditService');
 
 async function getClientFeatureFlags(clientId) {
   if (!clientId) {
@@ -140,6 +141,30 @@ exports.login = async (req, res) => {
       { expiresIn: '7d' },
       (err, token) => {
         if (err) throw err;
+        void logAction({
+          req,
+          actor: isAdvisor
+            ? {
+                id: advisor.id,
+                role: 'advisor',
+                clientId: advisor.clientId,
+                email: advisor.email
+              }
+            : {
+                id: user.id,
+                role: user.role,
+                clientId: user.clientId,
+                email: user.email
+              },
+          clientId: isAdvisor ? advisor.clientId : user.clientId,
+          action: 'auth.login.success',
+          targetType: isAdvisor ? 'advisor' : 'user',
+          targetId: isAdvisor ? advisor.id : user.id,
+          metadata: {
+            email,
+            loginType: isAdvisor ? 'advisor' : 'user'
+          }
+        });
         res.json({
           token,
           user: userResponse

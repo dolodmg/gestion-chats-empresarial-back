@@ -4,6 +4,7 @@ const WhatsAppService = require('../services/whatsappService');
 const ChatState = require('../models/ChatState');
 const sseService = require('../services/sseService');
 const Advisor = require('../models/Advisor');
+const { logAction } = require('../services/auditService');
 
 // Obtener todos los chats de un cliente
 // ⚡ OPTIMIZADO - Obtener todos los chats de un cliente con paginación
@@ -515,6 +516,19 @@ exports.changeChatStatus = async (req, res) => {
       chat.statusChangeTime
     );
 
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.status.changed',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        status,
+        statusChangeTime: chat.statusChangeTime,
+        phoneNumber: chat.phoneNumber || null
+      }
+    });
+
     res.json({
       chatId,
       chatStatus: chat.chatStatus,
@@ -744,6 +758,23 @@ exports.sendManualMessage = async (req, res) => {
       await chat.save();
       console.log('Tiempo de control renovado en Chat');
     }
+
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.manual_message.sent',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        messageId: newMessage._id.toString(),
+        phoneNumber,
+        hasFile,
+        mediaType,
+        fileName,
+        messageType: newMessage.messageType,
+        status: newMessage.status
+      }
+    });
 
     res.json({
       success: true,
@@ -1044,6 +1075,18 @@ exports.assignChatToAdvisor = async (req, res) => {
       assignedAdvisorName: chat.assignedAdvisorName
     });
 
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.advisor_assignment.updated',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        advisorId: advisorId || null,
+        advisorName
+      }
+    });
+
 
     console.log(`✅ Chat ${chatId} ${advisorId ? `asignado a ${advisorName}` : 'desasignado'}`);
 
@@ -1315,6 +1358,19 @@ exports.deleteMessage = async (req, res) => {
 
     console.log(`🗑️ Mensaje eliminado: ${messageId}`);
 
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.message.deleted',
+      targetType: 'message',
+      targetId: messageId,
+      metadata: {
+        chatId: message.chatId,
+        phoneNumber: message.phoneNumber || null,
+        messageType: message.messageType || null
+      }
+    });
+
     res.json({ success: true, msg: 'Mensaje eliminado' });
   } catch (error) {
     console.error('Error al eliminar mensaje:', error);
@@ -1341,6 +1397,18 @@ exports.deleteChat = async (req, res) => {
     const chatResult = await Chat.deleteOne({ chatId, clientId });
 
     console.log(`🗑️ Chat eliminado: ${chatId} (${messagesResult.deletedCount} mensajes)`);
+
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.deleted',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        deletedMessages: messagesResult.deletedCount,
+        deletedChat: chatResult.deletedCount
+      }
+    });
 
     res.json({
       success: true,

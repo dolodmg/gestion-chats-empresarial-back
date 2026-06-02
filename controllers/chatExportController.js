@@ -1,6 +1,7 @@
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const Advisor = require('../models/Advisor');
+const { logAction } = require('../services/auditService');
 
 /**
  * Obtener todos los IDs de chats (para seleccionar todos)
@@ -24,6 +25,17 @@ exports.getAllChatIds = async (req, res) => {
         // Obtener solo los chatIds
         const chats = await Chat.find({ clientId }).select('chatId').lean();
         const chatIds = chats.map(chat => chat.chatId);
+
+        void logAction({
+            req,
+            clientId,
+            action: 'chat.export_ids.requested',
+            targetType: 'chat_collection',
+            targetId: clientId,
+            metadata: {
+                count: chatIds.length
+            }
+        });
 
         res.json({
             count: chatIds.length,
@@ -156,6 +168,20 @@ exports.exportChats = async (req, res) => {
             // Exportar como JSON
             res.setHeader('Content-Type', 'application/json');
             res.setHeader('Content-Disposition', `attachment; filename="chats-export-${Date.now()}.json"`);
+            void logAction({
+                req,
+                clientId,
+                action: 'chat.export.generated',
+                targetType: 'chat_collection',
+                targetId: clientId,
+                metadata: {
+                    format,
+                    startDate: startDate || null,
+                    endDate: endDate || null,
+                    totalChats: chats.length,
+                    totalMessages: messages.length
+                }
+            });
             return res.json(exportData);
         } else {
             // Exportar como CSV
@@ -205,6 +231,20 @@ exports.exportChats = async (req, res) => {
 
             res.setHeader('Content-Type', 'text/csv');
             res.setHeader('Content-Disposition', `attachment; filename="chats-export-${Date.now()}.csv"`);
+            void logAction({
+                req,
+                clientId,
+                action: 'chat.export.generated',
+                targetType: 'chat_collection',
+                targetId: clientId,
+                metadata: {
+                    format,
+                    startDate: startDate || null,
+                    endDate: endDate || null,
+                    totalChats: chats.length,
+                    totalMessages: messages.length
+                }
+            });
             return res.send(combinedCsv);
         }
 

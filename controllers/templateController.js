@@ -3,6 +3,7 @@ const WhatsAppService = require('../services/whatsappService');
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const { logAction } = require('../services/auditService');
 
 /**
  * Crear una nueva plantilla
@@ -399,6 +400,21 @@ exports.sendTemplateToChat = async (req, res) => {
         console.log(`✅ Chat ${chatId} cambiado a modo HUMAN exitosamente`);
         console.log(`Estado actual: ${chat.chatStatus}`);
         console.log('🎉 ===== PLANTILLA ENVIADA EXITOSAMENTE =====');
+
+        void logAction({
+            req,
+            clientId,
+            action: 'chat.template.sent',
+            targetType: 'chat',
+            targetId: chatId,
+            metadata: {
+                templateId: template.id,
+                templateName: template.name,
+                phoneNumber,
+                messageId: newMessage._id.toString(),
+                parametersCount: parameters?.length || 0
+            }
+        });
 
         res.json({
             msg: 'Plantilla enviada exitosamente',
