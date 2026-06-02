@@ -598,7 +598,9 @@ exports.sendManualMessage = async (req, res) => {
       fileName = req.file.originalname;
 
       // Determinar mediaType basado en el mimeType
-      if (mimeType.startsWith('image/')) {
+      if (mimeType === 'image/webp') {
+        mediaType = 'sticker';
+      } else if (mimeType.startsWith('image/')) {
         mediaType = 'image';
       } else if (mimeType.startsWith('video/')) {
         mediaType = 'video';
@@ -628,7 +630,7 @@ exports.sendManualMessage = async (req, res) => {
       chatId,
       clientId,
       sender: 'bot', // Aunque es manual, para el usuario final viene del "bot"
-      content: content || (fileName ? `📎 ${fileName}` : ''),
+      content: content || (mediaType === 'sticker' ? 'Sticker' : (fileName ? `📎 ${fileName}` : '')),
       mediaUrl,
       mediaType,
       fileName,
@@ -660,6 +662,9 @@ exports.sendManualMessage = async (req, res) => {
       if (hasFile && mediaId) {
         // Enviar archivo según el tipo
         switch (mediaType) {
+          case 'sticker':
+            await WhatsAppService.sendStickerMessage(clientId, phoneNumber, mediaId);
+            break;
           case 'image':
             // Para imágenes, usar directamente el ID del media subido
             await WhatsAppService.sendImageMessage(clientId, phoneNumber, mediaId, content);
@@ -700,7 +705,7 @@ exports.sendManualMessage = async (req, res) => {
     }
 
     // Actualizar información del chat si existe
-    const displayMessage = content || (fileName ? `📎 ${fileName}` : '[archivo]');
+    const displayMessage = content || (mediaType === 'sticker' ? 'Sticker' : (fileName ? `📎 ${fileName}` : '[archivo]'));
     if (chat) {
       chat.lastMessage = displayMessage;
       chat.lastMessageTimestamp = new Date();

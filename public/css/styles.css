@@ -617,6 +617,27 @@ input:focus {
     align-items: flex-end;
 }
 
+.message-tools {
+    display: flex;
+    gap: 6px;
+    margin-right: 8px;
+}
+
+.tool-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.tool-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .message-input {
     flex: 1;
     padding: 8px 12px;
@@ -669,6 +690,137 @@ input:focus {
     cursor: not-allowed;
 }
 
+.message-form.disabled .tool-btn {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.message-panel {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: #fafafa;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.emoji-option {
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 12px;
+    padding: 8px 0;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.sticker-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.sticker-panel-note {
+    color: var(--text-light);
+    font-size: 0.8rem;
+}
+
+.sticker-section + .sticker-section {
+    margin-top: 14px;
+}
+
+.sticker-section-title {
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dark);
+}
+
+.sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+    gap: 10px;
+}
+
+.sticker-card {
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 16px;
+    padding: 8px;
+    min-height: 88px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.sticker-card-emoji {
+    font-size: 2rem;
+    display: block;
+}
+
+.sticker-card-name {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--text-dark);
+}
+
+.sticker-thumb {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    border-radius: 12px;
+}
+
+.sticker-creator {
+    display: grid;
+    gap: 10px;
+}
+
+.sticker-name-input,
+.sticker-file-input {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: white;
+}
+
+.sticker-preview-canvas {
+    width: 160px;
+    height: 160px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #e9f7ef, #f7f7f7);
+    border: 1px dashed var(--border-color);
+}
+
+.sticker-creator-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.secondary-action-btn {
+    border: 1px solid var(--border-color);
+    background: white;
+    color: var(--text-dark);
+    border-radius: 999px;
+    padding: 8px 14px;
+    cursor: pointer;
+}
+
+.secondary-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* Ajustar el tamaño del contenedor de mensajes */
 .messages-container {
     height: calc(100vh - 200px) !important;
@@ -712,6 +864,33 @@ input:focus {
     0% { opacity: 0.7; }
     50% { opacity: 1; }
     100% { opacity: 0.7; }
+}
+
+.message-media {
+    display: block;
+    max-width: 240px;
+    border-radius: 14px;
+    margin-bottom: 6px;
+}
+
+.message-sticker {
+    width: 128px;
+    max-width: 128px;
+    background: transparent;
+}
+
+@media (max-width: 768px) {
+    .emoji-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .sticker-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .message-media {
+        max-width: 180px;
+    }
 }
 
 /* AGREGAR AL FINAL DE styles.css - Solo estilos mínimos necesarios */

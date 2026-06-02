@@ -277,6 +277,45 @@ class WhatsAppService {
   }
 
   /**
+   * Envía un sticker a un número de WhatsApp
+   * @param {string} clientId - ID del cliente
+   * @param {string} phoneNumber - Número de teléfono del destinatario
+   * @param {string} mediaId - ID del media subido a Meta
+   */
+  static async sendStickerMessage(clientId, phoneNumber, mediaId) {
+    try {
+      const token = await this.getClientToken(clientId);
+      const apiUrl = `https://graph.facebook.com/v22.0/${clientId}/messages`;
+      const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
+
+      const payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhoneNumber,
+        type: "sticker",
+        sticker: {
+          id: mediaId
+        }
+      };
+
+      console.log(`Enviando sticker WhatsApp desde cliente ${clientId} a ${cleanPhoneNumber}`);
+
+      const response = await axios.post(apiUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log('Sticker enviado correctamente:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error al enviar sticker de WhatsApp:', error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Sube un archivo a la API de Meta y devuelve el media_id
    * @param {string} clientId - ID del cliente
    * @param {Buffer} fileBuffer - Buffer del archivo

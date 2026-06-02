@@ -133,8 +133,12 @@ function displayMessages(messages, isAtBottom, oldScrollTop) {
         messageElement.classList.add('message');
         messageElement.classList.add(message.sender === 'bot' ? 'bot-message' : 'user-message');
 
+        const mediaHtml = buildMediaHtml(message);
+        const shouldHideStickerLabel = message.mediaType === 'sticker' && message.content === 'Sticker';
+        const contentHtml = message.content && !shouldHideStickerLabel ? `<div class="message-content">${escapeHtml(message.content)}</div>` : '';
         messageElement.innerHTML = `
-            <div class="message-content">${message.content}</div>
+            ${mediaHtml}
+            ${contentHtml}
             <div class="message-time">${formatMessageTime(messageDate)}</div>
         `;
 
@@ -148,6 +152,36 @@ function displayMessages(messages, isAtBottom, oldScrollTop) {
         // Intentar mantener la posición aproximada
         messagesContainer.scrollTop = oldScrollTop;
     }
+}
+
+function buildMediaHtml(message) {
+    if (!message.mediaUrl || !message._id && !message.id) {
+        return '';
+    }
+
+    const messageId = message._id || message.id;
+    const token = localStorage.getItem('token');
+    const clientId = window.currentChatData && window.currentChatData.chat ? window.currentChatData.chat.clientId : '';
+    const mediaSrc = `/api/chats/media/${messageId}?token=${encodeURIComponent(token)}${clientId ? `&clientId=${encodeURIComponent(clientId)}` : ''}`;
+
+    if (message.mediaType === 'image') {
+        return `<img src="${mediaSrc}" alt="${escapeHtml(message.fileName || 'Imagen')}" class="message-media">`;
+    }
+
+    if (message.mediaType === 'sticker') {
+        return `<img src="${mediaSrc}" alt="${escapeHtml(message.fileName || 'Sticker')}" class="message-media message-sticker">`;
+    }
+
+    return `<a href="${mediaSrc}" target="_blank" rel="noopener noreferrer">${escapeHtml(message.fileName || 'Descargar archivo')}</a>`;
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 // Function to update chat header

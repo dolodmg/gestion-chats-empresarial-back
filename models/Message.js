@@ -26,7 +26,7 @@ const MessageSchema = new mongoose.Schema({
   },
   mediaType: {
     type: String,
-    enum: ['image', 'video', 'audio', 'document', null],
+    enum: ['image', 'video', 'audio', 'document', 'sticker', null],
     default: null,
   },
   fileName: {
@@ -43,7 +43,7 @@ const MessageSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['sent', 'delivered', 'read'],
+    enum: ['sent', 'delivered', 'read', 'failed'],
     default: 'sent',
   },
 });

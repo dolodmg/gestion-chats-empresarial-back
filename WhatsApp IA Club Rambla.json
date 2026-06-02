@@ -1,0 +1,1532 @@
+{
+  "name": "WhatsApp IA Club Rambla",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "messages",
+        "fields": "=clientId, chatId, contactName, phoneNumber, content, messageId, sender, status, timestamp",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        -992,
+        -496
+      ],
+      "id": "e5a658a8-516f-46f2-98e9-f2f06ef8d0e1",
+      "name": "Mensaje Emisor",
+      "credentials": {
+        "mongoDb": {
+          "id": "FkPlABjrNi7QHQJd",
+          "name": "MongoDB VPS Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "484c7a19-460b-41a6-824b-b7f43861cd3a",
+              "name": "clientId",
+              "value": "={{ $json.metadata.phone_number_id }}",
+              "type": "string"
+            },
+            {
+              "id": "397c6ee2-a5fa-4211-a6be-e76f9fc4bfe8",
+              "name": "contactName",
+              "value": "={{ $json.contacts[0].profile.name }}",
+              "type": "string"
+            },
+            {
+              "id": "6771d04b-c975-43d1-80a1-ee7ec11e4af6",
+              "name": "phoneNumber",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8ba90a95-7934-4e9e-9c50-14422f55ad20",
+              "name": "messageId",
+              "value": "={{ $json.messages[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "b40cdc90-446d-4f11-a682-e4aabfdb9191",
+              "name": "content",
+              "value": "={{ $json.messages[0].text.body }}",
+              "type": "string"
+            },
+            {
+              "id": "ccf65572-8b33-46a7-8d35-c7afd4cf29c8",
+              "name": "chatId",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "1ae4ff2e-8d73-4e1f-8a1c-cb763d507f28",
+              "name": "sender",
+              "value": "user",
+              "type": "string"
+            },
+            {
+              "id": "817a5e1e-8a9e-4f93-b0be-2193c2049e7c",
+              "name": "status",
+              "value": "received",
+              "type": "string"
+            },
+            {
+              "id": "01d3c227-e24f-4b1a-b6fb-65e8f7f45927",
+              "name": "timestamp",
+              "value": "={{ $now.toUTC()}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1216,
+        -496
+      ],
+      "id": "e1ff3136-ce07-4e2b-98e1-c79a32e639d0",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "15fe9527-4605-45ef-befd-e9fe9ba05f9b",
+              "leftValue": "={{ $json.contacts[0].wa_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "1be02cee-85f9-479e-9b81-cf940c6bb02c",
+              "leftValue": "={{ $json.statuses }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1664,
+        -208
+      ],
+      "id": "db3c03f1-8abf-4f07-8cca-e1563460572b",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -512,
+        -80
+      ],
+      "id": "83e11eae-67a8-43ec-914c-e090c24479af",
+      "name": "Window Buffer Memory"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "messages",
+        "fields": "clientId, chatId, phoneNumber, content, messageId, sender, status, timestamp",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        -208
+      ],
+      "id": "2c182b23-b633-4603-8bc7-67549c2c01ef",
+      "name": "Mensaje Receptor",
+      "credentials": {
+        "mongoDb": {
+          "id": "iuRmHDlEDpZ6osNw",
+          "name": "MONGO HOSTINGER"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "484c7a19-460b-41a6-824b-b7f43861cd3a",
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}",
+              "type": "string"
+            },
+            {
+              "id": "6771d04b-c975-43d1-80a1-ee7ec11e4af6",
+              "name": "phoneNumber",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8ba90a95-7934-4e9e-9c50-14422f55ad20",
+              "name": "messageId",
+              "value": "={{ $json.messages[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "b40cdc90-446d-4f11-a682-e4aabfdb9191",
+              "name": "content",
+              "value": "={{ $('Asistente TuteCars').item.json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "ccf65572-8b33-46a7-8d35-c7afd4cf29c8",
+              "name": "chatId",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "1ae4ff2e-8d73-4e1f-8a1c-cb763d507f28",
+              "name": "sender",
+              "value": "bot",
+              "type": "string"
+            },
+            {
+              "id": "817a5e1e-8a9e-4f93-b0be-2193c2049e7c",
+              "name": "status",
+              "value": "sent",
+              "type": "string"
+            },
+            {
+              "id": "01d3c227-e24f-4b1a-b6fb-65e8f7f45927",
+              "name": "timestamp",
+              "value": "={{ $now.toUTC() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        48,
+        -208
+      ],
+      "id": "a81d14c0-eda3-4196-8aed-a96f66eb7715",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "url": "http://chat.pupuia.com/api/n8n/check-chat-state",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "chatId",
+              "value": "={{ $json.messages[0].from }}"
+            },
+            {
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-token",
+              "value": "07092015Leyla@"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1216,
+        -208
+      ],
+      "id": "f744f586-2163-4d52-b8a4-7ad206c22a8b",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "428334d8-aea8-43ce-bf52-b580cb9ab95e",
+              "leftValue": "={{ $json.chatStatus }}",
+              "rightValue": "bot",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -992,
+        -208
+      ],
+      "id": "9873562a-7a39-4cb6-9606-1ccc30bdf382",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1038573376016445",
+        "recipientPhoneNumber": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+        "textBody": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        -208
+      ],
+      "id": "c5b4c676-1ab9-4296-8823-1fe1bd0326ac",
+      "name": "Send message",
+      "webhookId": "8262cb6f-1b07-41ec-981e-62f9d8de3b9c",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "d3GOdZI0i6sjSljk",
+          "name": "Club Rambla"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.pupuia.com/api/message-notification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-token",
+              "value": "07092015Leyla@"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}"
+            },
+            {
+              "name": "chatId",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "sender",
+              "value": "={{ $json.sender }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -592,
+        -496
+      ],
+      "id": "b39e0737-08bd-4f56-a8a0-b54df5dce0f5",
+      "name": "HTTP Request4",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "278b1fd1-c828-4b76-91b1-1787a4fcbabf",
+              "leftValue": "={{ $json.messages[0].type }}",
+              "rightValue": "text",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1440,
+        -208
+      ],
+      "id": "abe93d4d-3cc1-4107-b782-0952d6a34064",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "messages",
+        "fields": "clientId, chatId, phoneNumber, content, messageId, sender, status, timestamp",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        -176,
+        96
+      ],
+      "id": "4de10dd2-4686-40d7-92c6-d7d1b07a57d3",
+      "name": "Mensaje Receptor1",
+      "credentials": {
+        "mongoDb": {
+          "id": "iuRmHDlEDpZ6osNw",
+          "name": "MONGO HOSTINGER"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "484c7a19-460b-41a6-824b-b7f43861cd3a",
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}",
+              "type": "string"
+            },
+            {
+              "id": "6771d04b-c975-43d1-80a1-ee7ec11e4af6",
+              "name": "phoneNumber",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8ba90a95-7934-4e9e-9c50-14422f55ad20",
+              "name": "messageId",
+              "value": "={{ $json.messages[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "b40cdc90-446d-4f11-a682-e4aabfdb9191",
+              "name": "content",
+              "value": "=Lo sentimos. Solo podemos recibir mensajes de texto.",
+              "type": "string"
+            },
+            {
+              "id": "ccf65572-8b33-46a7-8d35-c7afd4cf29c8",
+              "name": "chatId",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "1ae4ff2e-8d73-4e1f-8a1c-cb763d507f28",
+              "name": "sender",
+              "value": "bot",
+              "type": "string"
+            },
+            {
+              "id": "817a5e1e-8a9e-4f93-b0be-2193c2049e7c",
+              "name": "status",
+              "value": "sent",
+              "type": "string"
+            },
+            {
+              "id": "01d3c227-e24f-4b1a-b6fb-65e8f7f45927",
+              "name": "timestamp",
+              "value": "={{ $now.toUTC() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -592,
+        96
+      ],
+      "id": "36652dd3-cb33-482c-95ef-f63cee517e4a",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1038573376016445",
+        "recipientPhoneNumber": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+        "textBody": "=Lo sentimos. Solo podemos recibir mensajes de texto.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        96
+      ],
+      "id": "e692ab2d-415a-4af0-b860-47993b941bd6",
+      "name": "Send message1",
+      "webhookId": "8262cb6f-1b07-41ec-981e-62f9d8de3b9c",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "d3GOdZI0i6sjSljk",
+          "name": "Club Rambla"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.pupuia.com/api/message-notification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-token",
+              "value": "07092015Leyla@"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}"
+            },
+            {
+              "name": "chatId",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "sender",
+              "value": "={{ $json.sender }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        48,
+        96
+      ],
+      "id": "80ec4275-954b-4eb4-bcdf-28e49527bdcd",
+      "name": "HTTP Request6",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Mensaje del usuario: {{ $('WhatsApp Trigger').item.json.messages[0].text.body }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=### Rol\n\nActúa como el asistente virtual de Club Rambla, un gimnasio ubicado en La Plata.\n\nTu objetivo es responder consultas de forma clara, rápida y motivadora, incentivando siempre a que el usuario se acerque al gimnasio.\n\nDebés priorizar responder solo cuestiones fundamentales del negocio:\n- planes\n- precios\n- horarios\n- inscripción\n- promociones\n- servicios principales\n\nSi una consulta es demasiado específica, excepcional, ambigua o fuera de este alcance, derivar a un asesor.\n\n---\n\n## Manejo de saludos\n\n1. Si el mensaje del usuario contiene únicamente un saludo o una presentación (por ejemplo: \"hola\", \"buen día\", \"buenas tardes\", \"hola cómo estás\", \"qué tal\"), responder SIEMPRE con \"¡Hola! 👋, somos Club Rambla. ¿En que te podemos ayudar?\"\n\n2. Si el mensaje contiene un saludo junto con una consulta o solicitud (por ejemplo: \"hola, cuál es el horario\", \"buen día, necesito un turno\", \"hola, cuánto cuesta el estudio\"), responder en un único mensaje:\n\n* Saluda y da la respuesta a la consulta realizada en un mismo mensaje.\n\nEjemplo:\nUsuario: \"Hola, ¿cuál es el horario de atención?\"\nRespuesta:\n\"¡Hola! 👋. Nuestro horario de atención es\n- Lunes a viernes: 06:00 a 00:00 hs\n- Sábados: 08:00 a 22:00 hs\n- Domingos: 16:00 a 22:00 hs\"\n\n3. No repetir el saludo institucional más de una vez dentro de la misma conversación. Una vez enviado el saludo inicial, responder únicamente a las consultas posteriores sin volver a saludar.\n\n---\n\n### Información del Gimnasio\n\nUbicación:\nAv. 19 Nº 481 (entre 41 y 42), La Plata\n\nWhatsApp:\n0221 696-0048\n\nHorarios:\n- Lunes a viernes: 06:00 a 00:00 hs\n- Sábados: 08:00 a 22:00 hs\n- Domingos: 16:00 a 22:00 hs\n\nFeriados:\nSuelen abrir, pero para horarios puntuales de feriados derivar a un asesor.\n\n---\n\n### Planes y Precios\n\nPlan Básico ($60.000)\nIncluye:\n- Acceso total al gym\n- Rutina personalizada\n- Seguimiento por profes\n\nPlan VIP ($70.000)\nIncluye:\n- Todo lo del plan básico\n- Consulta con nutricionista\n- 2 estudios corporales con Visbody\n- 10% OFF en viandas saludables de Café Rambla\n\nPlanes largos:\n- Trimestral: 10% OFF\n- Semestral: 15% OFF\n- Anual: 20% OFF\n\nPase diario / clase de prueba:\n- $10.000\n- Se descuenta si se inscribe el mismo día\n- Se abona al asistir\n\nCuando informes planes o precios, mencionar brevemente que también hay promociones vigentes:\n- Beneficio Rambla\n- Referidos\n- Plan familiar\n- Promos bancarias\n- Descuento en efectivo\n\n---\n\n### Beneficios y Promociones\n\nBeneficio Rambla:\n25% OFF para quienes viven sobre avenidas con rambla dentro del casco urbano de La Plata.\n\nSi preguntan si una dirección específica aplica:\nResponder SIEMPRE:\n\n“La promo Especial Rambla es para quienes viven sobre avenidas con rambla dentro del casco urbano de La Plata. Si no estás seguro si tu dirección aplica, te contacto con un asesor así lo revisan juntos.”\n\nSi preguntan qué avenidas participan o piden listado:\nNo listar avenidas.\nDerivar a asesor.\n\nReferidos:\n- 1 amigo: 10% OFF\n- 2 o más: 15% OFF\n\nPlan Familiar:\n- 10% OFF por persona\n\nBanco Galicia:\n- Hasta 3 cuotas sin interés\n- Jueves 30% OFF\n\nEfectivo:\n- 10% OFF\n\nPromociones no acumulables.\n\n---\n\n### Dinámica del gimnasio\n\nActividad principal:\nMusculación.\n\nNo hay clases como funcional, spinning o pilates.\n\nSi preguntan por actividades que no hay:\nResponder que las rutinas personalizadas cubren esos objetivos.\n\nSi preguntan:\n¿Tienen rutinas personalizadas?\n\nResponder:\n“Sí, ofrecemos rutinas personalizadas con nuestros profes. Acercate al gym y lo vemos juntos según tus objetivos 💪”\n\nNo brindar planificación de entrenamiento.\n\n---\n\n### Inscripción\n\nSolo presencial.\n\nNo se puede completar por chat.\n\nNo se reservan turnos.\n\nRequisitos:\n- Completar formulario\n- Apto médico si corresponde\n- Registro en app\n\nSiempre invitar a acercarse al gimnasio.\n\n---\n\n### Servicios y Profesionales\n\nDisponibles:\n- Nutricionista\n- Kinesiólogo\n- Masajista\n- Cosmiatra\n\nNo mencionar nombres ni detalles del staff.\n\n---\n\n### Servicios Extra\n\n- Café Rambla\n- Coworking\n- Venta de suplementos\n\n---\n\n### Tecnología\n\nVisbody:\nEscáner corporal 3D que mide:\n- Grasa\n- Músculo\n- Agua\n- Postura\n- Circunferencias\n\nEs un servicio destacado del gym.\n\n---\n\n### Club de Beneficios\n\nPrograma de beneficios para socios.\n\nEjemplo:\n- Gringo’s 10% OFF\n\n---\n\n### Accesibilidad\n\nSi preguntan por:\n- rampas\n- silla de ruedas\n- accesibilidad\n- discapacidad\n- infraestructura\n\nResponder SIEMPRE:\n\n“Nuestro gimnasio está acondicionado para brindar accesibilidad a todas las personas, incluyendo el ingreso y la circulación dentro del espacio. Como cada necesidad puede ser particular, te recomendamos hablar con uno de nuestros asesores para darte información más detallada y asegurarnos la mejor experiencia posible. ¿Querés que te contacten?”\n\nNo agregar más detalles.\n\n---\n\n### Consultas muy específicas / operativas\n\nPara consultas como:\n- lockers\n- toallas\n- servilletas\n- objetos personales\n- equipamiento puntual\n- reglas internas\n- casos muy específicos\n\nNo responder afirmando ni negando.\n\nResponder diciendo que un asesor va a tomar la consulta.\n\n---\n\n### Si piden hablar con un asesor / humano\n\nLlama a tu herramienta setAsesor para asignar un asesor y responder diciendo que un asesor va a tomar la consulta.\n---\n\n### Si hacen una queja o reclamo\n\nLlama a tu herramienta setAsesor para asignar un asesor y responder diciendo que lamentas mucho la queja y que un asesor va a tomar la consulta.\n\n---\n\n### Cuando no tengas una respuesta o esté fuera de alcance\n\nLlama a tu herramienta setAsesor para asignar un asesor y responder diciendo que no tenes acceso a esa informacion y que un asesor va a tomar la consulta.\n\n---\n\n### Restricciones importantes\n\nNunca:\n- inventar información\n- ofrecer reservas o turnos\n- recomendar dietas\n- recomendar suplementos\n- dar planificación de entrenamiento\n- mencionar cantidad de profesores\n- responder detalles internos no incluidos en este prompt\n- asumir que una dirección califica para Beneficio Rambla\n- listar avenidas con Beneficio Rambla\n- responder sí/no sobre lockers o toallas\n\nSi hay dudas:\nderivar llamando a tu herramienta setAsesor y comunicando que un asesor se va a conctactar.\n\n---\n\n### Estilo de respuesta\n\n- Amigable\n- Claro\n- Con energía\n- Respuestas cortas\n- Formato WhatsApp\n- Puede usar viñetas\n- Incentivar siempre a acercarse al gym\n\n---\n\n### Cierre obligatorio\n\nTerminar siempre con una invitación como:\n\n- ¿Te gustaría venir a conocer el gym?\n- Podés acercarte cuando quieras dentro del horario 💪\n- ¿Querés saber qué plan te conviene más?\n\nSiempre cerrar invitando.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -656,
+        -304
+      ],
+      "id": "909c0f2d-c956-49f3-8e77-b5b55018f93e",
+      "name": "Asistente TuteCars"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1888,
+        -208
+      ],
+      "id": "c063143b-d739-4c99-90f6-aca0e56c35e2",
+      "name": "WhatsApp Trigger",
+      "webhookId": "af7cd76d-be82-4e52-aed9-36301c8601cb",
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "NLFquvJrUiX3stcQ",
+          "name": "Club Rambla"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -768,
+        -80
+      ],
+      "id": "174d42f3-d069-4fae-b571-db206ccc0749",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "qCBt0TkWQE4pQTBB",
+          "name": "AAM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "deepseek-v4-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatDeepSeek",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        -80
+      ],
+      "id": "a64cbe1d-0f98-4175-946c-9df4cc26cab3",
+      "name": "DeepSeek Chat Model1",
+      "credentials": {
+        "deepSeekApi": {
+          "id": "pzBeJIQmDKcrl4M7",
+          "name": "FUNDACION EDLP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.pupuia.com/api/message-notification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-token",
+              "value": "07092015Leyla@"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}"
+            },
+            {
+              "name": "chatId",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "sender",
+              "value": "={{ $json.sender }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        496,
+        -208
+      ],
+      "id": "6154483f-2b34-4f04-b202-8e5da682f8b5",
+      "name": "HTTP Request5",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Asigna un asesor al chat.",
+        "method": "POST",
+        "url": "https://chat.pupuia.com/api/n8n/mark-chat-attention",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-token",
+              "value": "07092015Leyla@"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}"
+            },
+            {
+              "name": "chatId",
+              "value": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        -384,
+        -80
+      ],
+      "id": "1fdbabf4-8218-4b2f-a6ca-9d4bf72acd7b",
+      "name": "setAsesor"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "messages",
+        "fields": "=clientId, chatId, contactName, phoneNumber, content, messageId, sender, status, timestamp, mediaType, fileName, mimeType, mediaUrl",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        -176,
+        288
+      ],
+      "id": "9bac4e20-5a2b-4235-8d2b-14e5a180f298",
+      "name": "Mensaje Emisor1",
+      "credentials": {
+        "mongoDb": {
+          "id": "FkPlABjrNi7QHQJd",
+          "name": "MongoDB VPS Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.pupuia.com/api/message-notification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-token",
+              "value": "07092015Leyla@"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}"
+            },
+            {
+              "name": "chatId",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "sender",
+              "value": "={{ $json.sender }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "mediaUrl",
+              "value": "={{ $('Edit Fields4').item.json.mediaUrl }}"
+            },
+            {
+              "name": "mediaType",
+              "value": "={{ $json.mediaType }}"
+            },
+            {
+              "name": "fileName",
+              "value": "={{ $('Edit Fields4').item.json.fileName }}"
+            },
+            {
+              "name": "mimeType",
+              "value": "={{ $json.mimeType }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        48,
+        288
+      ],
+      "id": "e58044b1-ea78-4990-9434-32c2fb7b8410",
+      "name": "HTTP Request7",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "messages",
+        "fields": "=clientId, chatId, contactName, phoneNumber, content, messageId, sender, status, timestamp, mediaType, fileName, mimeType, mediaUrl",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        -176,
+        480
+      ],
+      "id": "74ceb494-4949-40a1-90ee-502b93c85e63",
+      "name": "Mensaje Emisor2",
+      "credentials": {
+        "mongoDb": {
+          "id": "FkPlABjrNi7QHQJd",
+          "name": "MongoDB VPS Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "484c7a19-460b-41a6-824b-b7f43861cd3a",
+              "name": "clientId",
+              "value": "={{ $json.metadata.phone_number_id }}",
+              "type": "string"
+            },
+            {
+              "id": "397c6ee2-a5fa-4211-a6be-e76f9fc4bfe8",
+              "name": "contactName",
+              "value": "={{ $json.contacts[0].profile.name }}",
+              "type": "string"
+            },
+            {
+              "id": "6771d04b-c975-43d1-80a1-ee7ec11e4af6",
+              "name": "phoneNumber",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8ba90a95-7934-4e9e-9c50-14422f55ad20",
+              "name": "messageId",
+              "value": "={{ $json.messages[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "b40cdc90-446d-4f11-a682-e4aabfdb9191",
+              "name": "content",
+              "value": "={{ $json.messages[0].text.body }}",
+              "type": "string"
+            },
+            {
+              "id": "ccf65572-8b33-46a7-8d35-c7afd4cf29c8",
+              "name": "chatId",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "1ae4ff2e-8d73-4e1f-8a1c-cb763d507f28",
+              "name": "sender",
+              "value": "user",
+              "type": "string"
+            },
+            {
+              "id": "817a5e1e-8a9e-4f93-b0be-2193c2049e7c",
+              "name": "status",
+              "value": "received",
+              "type": "string"
+            },
+            {
+              "id": "01d3c227-e24f-4b1a-b6fb-65e8f7f45927",
+              "name": "timestamp",
+              "value": "={{ $now.toUTC().setZone('America/Buenos_Aires')}}",
+              "type": "string"
+            },
+            {
+              "id": "4efbc0b6-fdf0-488a-861d-ce6477b7b416",
+              "name": "mediaType",
+              "value": "={{ $json.messages[0].type }}",
+              "type": "string"
+            },
+            {
+              "id": "c6428dc7-854a-4db9-af0b-1d92326f9315",
+              "name": "mimeType",
+              "value": "={{ $json.messages[0].image.mime_type }}",
+              "type": "string"
+            },
+            {
+              "id": "72395957-c4b8-4da7-9d52-dd2ed5e6b440",
+              "name": "mediaUrl",
+              "value": "=meta:{{ $json.messages[0].image.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -592,
+        480
+      ],
+      "id": "d97032b3-abc2-4847-8806-4d4ee10c2d49",
+      "name": "Edit Fields3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.pupuia.com/api/message-notification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-token",
+              "value": "07092015Leyla@"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId",
+              "value": "={{ $('WhatsApp Trigger').item.json.metadata.phone_number_id }}"
+            },
+            {
+              "name": "chatId",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "sender",
+              "value": "={{ $json.sender }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "mediaUrl",
+              "value": "={{ $('Edit Fields3').item.json.mediaUrl }}"
+            },
+            {
+              "name": "mediaType",
+              "value": "={{ $json.mediaType }}"
+            },
+            {
+              "name": "fileName",
+              "value": "={{ $('Edit Fields3').item.json.fileName }}"
+            },
+            {
+              "name": "mimeType",
+              "value": "={{ $json.mimeType }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        48,
+        480
+      ],
+      "id": "64825a82-67bc-49ac-b321-b417b6e9dd7b",
+      "name": "HTTP Request8",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "484c7a19-460b-41a6-824b-b7f43861cd3a",
+              "name": "clientId",
+              "value": "={{ $json.metadata.phone_number_id }}",
+              "type": "string"
+            },
+            {
+              "id": "397c6ee2-a5fa-4211-a6be-e76f9fc4bfe8",
+              "name": "contactName",
+              "value": "={{ $json.contacts[0].profile.name }}",
+              "type": "string"
+            },
+            {
+              "id": "6771d04b-c975-43d1-80a1-ee7ec11e4af6",
+              "name": "phoneNumber",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8ba90a95-7934-4e9e-9c50-14422f55ad20",
+              "name": "messageId",
+              "value": "={{ $json.messages[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "b40cdc90-446d-4f11-a682-e4aabfdb9191",
+              "name": "content",
+              "value": "={{ $json.messages[0].text.body }}",
+              "type": "string"
+            },
+            {
+              "id": "ccf65572-8b33-46a7-8d35-c7afd4cf29c8",
+              "name": "chatId",
+              "value": "={{ $json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "1ae4ff2e-8d73-4e1f-8a1c-cb763d507f28",
+              "name": "sender",
+              "value": "user",
+              "type": "string"
+            },
+            {
+              "id": "817a5e1e-8a9e-4f93-b0be-2193c2049e7c",
+              "name": "status",
+              "value": "received",
+              "type": "string"
+            },
+            {
+              "id": "01d3c227-e24f-4b1a-b6fb-65e8f7f45927",
+              "name": "timestamp",
+              "value": "={{ $now.toUTC().setZone('America/Buenos_Aires')}}",
+              "type": "string"
+            },
+            {
+              "id": "4efbc0b6-fdf0-488a-861d-ce6477b7b416",
+              "name": "mediaType",
+              "value": "={{ $json.messages[0].type }}",
+              "type": "string"
+            },
+            {
+              "id": "f046835b-42e9-438c-a0b4-42d0d8cbc172",
+              "name": "fileName",
+              "value": "={{ $json.messages[0].document.filename }}",
+              "type": "string"
+            },
+            {
+              "id": "c6428dc7-854a-4db9-af0b-1d92326f9315",
+              "name": "mimeType",
+              "value": "={{ $json.messages[0].document.mime_type }}",
+              "type": "string"
+            },
+            {
+              "id": "72395957-c4b8-4da7-9d52-dd2ed5e6b440",
+              "name": "mediaUrl",
+              "value": "=meta:{{ $json.messages[0].document.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -592,
+        288
+      ],
+      "id": "04c049d8-7fce-423b-9865-afe6686db2e1",
+      "name": "Edit Fields4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bc6c8f19-842e-4891-b6b3-269e246f2dbf",
+              "leftValue": "={{ $json.messages[0].type }}",
+              "rightValue": "image",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -992,
+        384
+      ],
+      "id": "657a222c-5627-4ccc-b553-4db4bc770651",
+      "name": "If4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "278b1fd1-c828-4b76-91b1-1787a4fcbabf",
+              "leftValue": "={{ $json.messages[0].type }}",
+              "rightValue": "image",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "0a033ff0-80d6-4974-9250-9708aa91f13d",
+              "leftValue": "={{ $json.messages[0].type }}",
+              "rightValue": "document",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1216,
+        288
+      ],
+      "id": "2c0aa04a-9ce3-4611-a7d9-fc3b0ce63d3b",
+      "name": "If5"
+    }
+  ],
+  "pinData": {
+    "WhatsApp Trigger": [
+      {
+        "json": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "5492216960048",
+            "phone_number_id": "1038573376016445"
+          },
+          "contacts": [
+            {
+              "profile": {
+                "name": "Graciela Guzman"
+              },
+              "wa_id": "5492215418191",
+              "user_id": "AR.1191123947407955"
+            }
+          ],
+          "messages": [
+            {
+              "from": "5492215418191",
+              "from_user_id": "AR.1191123947407955",
+              "id": "wamid.HBgNNTQ5MjIxNTQxODE5MRUCABIYIEFDMTg5MDRBQ0QxQUNEQzA2MTAwQjdGOTBCOUIxRTkzAA==",
+              "timestamp": "1779469182",
+              "text": {
+                "body": "Cómo es el tema de las toallas y los lockers"
+              },
+              "type": "text"
+            }
+          ],
+          "field": "messages"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Mensaje Emisor": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Mensaje Emisor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Asistente TuteCars",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje Receptor": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Mensaje Receptor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Asistente TuteCars",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje Receptor1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Mensaje Receptor1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asistente TuteCars": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Asistente TuteCars",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Asistente TuteCars",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "setAsesor": {
+      "ai_tool": [
+        [
+          {
+            "node": "Asistente TuteCars",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje Emisor1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje Emisor2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields3": {
+      "main": [
+        [
+          {
+            "node": "Mensaje Emisor2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields4": {
+      "main": [
+        [
+          {
+            "node": "Mensaje Emisor1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If4": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If5": {
+      "main": [
+        [
+          {
+            "node": "If4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "766f0cb5-8868-45cf-ae3e-a0ec00c33903",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9b8fad3009628f92f02fda381e33ae1327dd73b755b954142faaf6498a12964a"
+  },
+  "id": "xoviRrZ9Brxcd6LX",
+  "tags": []
+}

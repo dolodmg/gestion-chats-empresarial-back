@@ -98,6 +98,10 @@
                                 <span id="timer-display" class="timer-display"></span>
                             </div>
                             <form id="message-form" class="message-form disabled">
+                                <div class="message-tools">
+                                    <button type="button" id="emoji-toggle-btn" class="tool-btn" title="Emojis" disabled>😊</button>
+                                    <button type="button" id="sticker-toggle-btn" class="tool-btn" title="Stickers" disabled>🧩</button>
+                                </div>
                                 <textarea id="message-input" placeholder="Escribe un mensaje..." class="message-input" rows="1" disabled></textarea>
                                 <button type="submit" class="send-btn" disabled>
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -106,6 +110,35 @@
                                     </svg>
                                 </button>
                             </form>
+                            <div id="emoji-panel" class="message-panel hidden">
+                                <div id="emoji-grid" class="emoji-grid"></div>
+                            </div>
+                            <div id="sticker-panel" class="message-panel hidden">
+                                <div class="sticker-panel-header">
+                                    <strong>Stickers</strong>
+                                    <span class="sticker-panel-note">WEBP hasta 100 KB</span>
+                                </div>
+                                <div class="sticker-section">
+                                    <div class="sticker-section-title">Biblioteca default</div>
+                                    <div id="default-sticker-grid" class="sticker-grid"></div>
+                                </div>
+                                <div class="sticker-section">
+                                    <div class="sticker-section-title">Tus stickers</div>
+                                    <div id="custom-sticker-grid" class="sticker-grid"></div>
+                                </div>
+                                <div class="sticker-section">
+                                    <div class="sticker-section-title">Crear sticker</div>
+                                    <div class="sticker-creator">
+                                        <input type="text" id="sticker-name-input" class="sticker-name-input" placeholder="Nombre del sticker">
+                                        <input type="file" id="sticker-source-input" accept="image/*" class="sticker-file-input">
+                                        <canvas id="sticker-preview-canvas" class="sticker-preview-canvas" width="512" height="512"></canvas>
+                                        <div class="sticker-creator-actions">
+                                            <button type="button" id="save-sticker-btn" class="secondary-action-btn" disabled>Guardar</button>
+                                            <button type="button" id="send-created-sticker-btn" class="secondary-action-btn" disabled>Enviar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

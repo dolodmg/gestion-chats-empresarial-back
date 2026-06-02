@@ -1,21 +1,28 @@
 const UserTag = require('../models/UserTags');
 const Chat = require('../models/Chat');
 
+async function resolveTagContext(req) {
+  let clientId = req.user.clientId;
+  let userId = req.user.id;
+
+  if (req.user.role === 'advisor') {
+    const User = require('../models/User');
+    const client = await User.findOne({ clientId: req.user.clientId, role: 'client' });
+
+    if (client) {
+      userId = client._id.toString();
+    }
+  }
+
+  return { clientId, userId };
+}
+
 exports.getUserTags = async (req, res) => {
   try {
-    let userId = req.user.id;
+    const { userId } = await resolveTagContext(req);
 
-    // If user is an advisor, get tags from their client instead
-    if (req.user.role === 'advisor') {
-      const User = require('../models/User');
-      const client = await User.findOne({ clientId: req.user.clientId, role: 'client' });
-
-      if (client) {
-        userId = client._id.toString();
-      } else {
-        // If no client found, return empty tags
-        return res.json({ tags: [] });
-      }
+    if (!userId) {
+      return res.json({ tags: [] });
     }
 
     let userTags = await UserTag.findOne({ userId });
@@ -150,8 +157,7 @@ exports.addTagToChat = async (req, res) => {
   try {
     const { chatId } = req.params;
     const { tag } = req.body;
-    const clientId = req.user.clientId;
-    const userId = req.user.id;
+    const { clientId, userId } = await resolveTagContext(req);
 
     if (!tag || tag.trim() === '') {
       return res.status(400).json({ error: 'El nombre de la tag es requerido' });
@@ -242,7 +248,7 @@ exports.addTagToChat = async (req, res) => {
 exports.removeTagFromChat = async (req, res) => {
   try {
     const { chatId, tagName } = req.params;
-    const clientId = req.user.clientId;
+    const { clientId } = await resolveTagContext(req);
     const tagNameLower = tagName.toLowerCase();
 
     const chat = await Chat.findOne({ chatId, clientId });
@@ -268,7 +274,7 @@ exports.updateChatTags = async (req, res) => {
   try {
     const { chatId } = req.params;
     const { tags } = req.body;
-    const clientId = req.user.clientId;
+    const { clientId } = await resolveTagContext(req);
 
     if (!Array.isArray(tags)) {
       return res.status(400).json({ error: 'Tags debe ser un array' });
@@ -295,7 +301,7 @@ exports.updateChatTags = async (req, res) => {
 
 exports.getTagStats = async (req, res) => {
   try {
-    const clientId = req.user.clientId;
+    const { clientId } = await resolveTagContext(req);
 
     const stats = await Chat.aggregate([
       { $match: { clientId } },

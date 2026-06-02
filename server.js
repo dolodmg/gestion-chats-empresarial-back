@@ -95,6 +95,7 @@ app.use('/api/summaries', require('./routes/summaries'));
 
 // ✨ NUEVO: Rutas de Plantillas de WhatsApp
 app.use('/api/templates', require('./routes/templates'));
+app.use('/api/stickers', require('./routes/stickers'));
 
 
 // ==================== ENDPOINT N8N ====================
