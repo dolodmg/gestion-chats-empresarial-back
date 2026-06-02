@@ -18,9 +18,31 @@ const tagRoutes = require('./routes/tags');
 dotenv.config();
 const app = express();
 
+const DEFAULT_ALLOWED_ORIGINS = [
+    'https://chat.pupuia.com',
+    'http://localhost:3000',
+    'http://localhost:4173',
+    'http://localhost:5173'
+];
+
+const configuredOrigins = (process.env.FRONTEND_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+const allowedOrigins = configuredOrigins.length > 0
+    ? configuredOrigins
+    : DEFAULT_ALLOWED_ORIGINS;
+
 // Middleware
 app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error('CORS origin not allowed'));
+    },
     credentials: true
 }));
 app.use(express.json());

@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Message = require('../models/Message');
+const { serializeUser } = require('../utils/userResponse');
 const ARGENTINA_UTC_OFFSET = '-03:00';
 const FEATURE_FLAG_KEYS = [
   'data',
@@ -80,7 +81,7 @@ exports.getUsers = async (req, res) => {
     if (!ensureAdmin(req, res)) return;
 
     const users = await User.find().select('-password');
-    res.json(users);
+    res.json(users.map(serializeUser));
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ msg: 'Error del servidor' });
@@ -221,7 +222,7 @@ exports.getUserById = async (req, res) => {
       return res.status(404).json({ msg: 'Usuario no encontrado' });
     }
 
-    res.json(user);
+    res.json(serializeUser(user));
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({ msg: 'Error del servidor' });
@@ -272,7 +273,7 @@ exports.updateUser = async (req, res) => {
       { new: true }
     ).select('-password');
 
-    res.json(user);
+    res.json(serializeUser(user));
   } catch (error) {
     console.error('Error updating user:', error);
     res.status(500).json({ msg: 'Error del servidor' });

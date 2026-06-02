@@ -221,7 +221,7 @@ function displayUsers(users) {
             <td>${user.role === 'admin' ? 'Administrador' : 'Cliente'}</td>
             <td>${user.clientId || '-'}</td>
             <td>${user.workflowId || '-'}</td>
-            <td>${user.whatsappToken ? '***configurado***' : 'No configurado'}</td>
+            <td>${user.hasWhatsappToken ? '***configurado***' : 'No configurado'}</td>
             <td class="action-buttons">
                 <button class="edit-btn" data-user-id="${user._id}">Editar</button>
                 ${user.role === 'client' ? `<button class="tables-btn" data-client-id="${user.clientId}" data-user-name="${user.name}">Tablas</button>` : ''}
@@ -309,7 +309,7 @@ function openUserModal(user = null) {
             clientIdInput.value = user.clientId || '';
             workflowIdInput.value = user.workflowId || '';
             // No mostrar el token por seguridad, solo placeholder
-            whatsappTokenInput.placeholder = user.whatsappToken ? 'Token configurado (dejar vacío para mantener)' : 'Ingresar token de WhatsApp';
+            whatsappTokenInput.placeholder = user.hasWhatsappToken ? 'Token configurado (dejar vacío para mantener)' : 'Ingresar token de WhatsApp';
         }
     } else {
         // Modo creación

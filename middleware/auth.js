@@ -2,8 +2,11 @@ const jwt = require('jsonwebtoken');
 
 module.exports = (req, res, next) => {
   try {
-    // Obtener token del header o query parameter (para media proxy)
-    const token = req.header('x-auth-token') || req.query.token;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length)
+      : null;
+    const token = bearerToken || req.header('x-auth-token');
 
     // Verificar si no hay token
     if (!token) {
@@ -14,6 +17,11 @@ module.exports = (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = decoded.user;
+
+      if (!req.user) {
+        return res.status(401).json({ msg: 'Token no vÃ¡lido' });
+      }
+
       next();
     } catch (err) {
       console.error('Error al verificar token:', err.message);

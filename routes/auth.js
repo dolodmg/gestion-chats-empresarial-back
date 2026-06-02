@@ -5,6 +5,8 @@ const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Advisor = require('../models/Advisor');
 const bcrypt = require('bcryptjs');
+const { createBrowserToken } = require('../utils/browserToken');
+const { serializeUser } = require('../utils/userResponse');
 
 // Registro de usuario
 router.post('/register', authController.register);
@@ -36,9 +38,41 @@ router.get('/', auth, async (req, res) => {
     }
 
     const user = await User.findById(req.user.id).select('-password');
-    res.json(user);
+    res.json(serializeUser(user));
   } catch (error) {
     console.error('Error fetching user:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+});
+
+router.get('/browser-token', auth, async (req, res) => {
+  try {
+    if (req.user.role === 'advisor') {
+      const advisor = await Advisor.findById(req.user.id).select('_id clientId');
+      if (!advisor) {
+        return res.status(404).json({ msg: 'Usuario no encontrado' });
+      }
+
+      return res.json({
+        browserToken: createBrowserToken({
+          id: advisor.id,
+          role: 'advisor',
+          clientId: advisor.clientId,
+          advisorId: advisor.id
+        })
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('_id role clientId');
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuario no encontrado' });
+    }
+
+    return res.json({
+      browserToken: createBrowserToken(user)
+    });
+  } catch (error) {
+    console.error('Error creating browser token:', error);
     res.status(500).json({ msg: 'Error del servidor' });
   }
 });

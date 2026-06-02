@@ -771,7 +771,7 @@ exports.getMedia = async (req, res) => {
     }
 
     // Buscar el mensaje
-    const message = await Message.findById(messageId);
+    const message = await Message.findOne({ _id: messageId, clientId });
     if (!message) {
       return res.status(404).json({ msg: 'Mensaje no encontrado' });
     }
