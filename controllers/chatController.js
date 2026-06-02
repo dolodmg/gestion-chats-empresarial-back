@@ -629,7 +629,12 @@ exports.sendManualMessage = async (req, res) => {
     const newMessage = new Message({
       chatId,
       clientId,
-      sender: 'bot', // Aunque es manual, para el usuario final viene del "bot"
+      sender: 'bot',
+      direction: 'outbound',
+      source: 'dashboard',
+      provider: 'internal',
+      insertedBy: `${req.user.role}:${req.user.id}`,
+      aiGenerated: false,
       content: content || (mediaType === 'sticker' ? 'Sticker' : (fileName ? `📎 ${fileName}` : '')),
       mediaUrl,
       mediaType,
@@ -637,7 +642,8 @@ exports.sendManualMessage = async (req, res) => {
       mimeType,
       timestamp: new Date(),
       status: 'sent',
-      phoneNumber
+      phoneNumber,
+      messageType: mediaType || 'text'
     });
 
     await newMessage.save();
@@ -700,6 +706,7 @@ exports.sendManualMessage = async (req, res) => {
       // Actualizar el estado del mensaje como failed pero no fallar la respuesta
       await Message.findByIdAndUpdate(newMessage._id, {
         status: 'failed',
+        errorCode: 'WHATSAPP_SEND_FAILED',
         errorMessage: whatsappError.message
       });
     }

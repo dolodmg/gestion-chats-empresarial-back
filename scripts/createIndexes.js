@@ -30,6 +30,33 @@ async function createIndexes() {
     const db = mongoose.connection.db;
     const Message = db.collection('messages');
     const Chat = db.collection('chats');
+
+    async function findDuplicateMessageIds() {
+      return Message.aggregate([
+        {
+          $match: {
+            messageId: { $exists: true, $type: 'string', $ne: '' }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              clientId: '$clientId',
+              messageId: '$messageId'
+            },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $match: {
+            count: { $gt: 1 }
+          }
+        },
+        {
+          $limit: 20
+        }
+      ]).toArray();
+    }
     
     // ========================================
     // VERIFICAR ÍNDICES EXISTENTES
@@ -125,6 +152,58 @@ async function createIndexes() {
       { name: 'chatId_clientId_timestamp', background: true },
       'messages'
     );
+
+    // Índice 4
+    console.log('  4. Índice: clientId + phoneNumber + timestamp...');
+    await createOrSkipIndex(
+      Message,
+      { clientId: 1, phoneNumber: 1, timestamp: -1 },
+      { name: 'clientId_phoneNumber_timestamp', background: true },
+      'messages'
+    );
+
+    // Índice 5
+    console.log('  5. Índice: clientId + source + timestamp...');
+    await createOrSkipIndex(
+      Message,
+      { clientId: 1, source: 1, timestamp: -1 },
+      { name: 'clientId_source_timestamp', background: true },
+      'messages'
+    );
+
+    // Índice 6
+    console.log('  6. Índice: retentionUntil...');
+    await createOrSkipIndex(
+      Message,
+      { retentionUntil: 1 },
+      { name: 'retentionUntil_idx', background: true },
+      'messages'
+    );
+
+    // Índice 7
+    console.log('  7. Índice único parcial: clientId + messageId...');
+    const duplicateMessageIds = await findDuplicateMessageIds();
+    if (duplicateMessageIds.length > 0) {
+      console.log('     ⚠️  No se crea el índice único porque hay duplicados existentes.');
+      console.log('     Ejecuta primero: node scripts/dedupeMessages.js');
+      duplicateMessageIds.forEach((item) => {
+        console.log(`        - clientId=${item._id.clientId} messageId=${item._id.messageId} count=${item.count}`);
+      });
+    } else {
+      await createOrSkipIndex(
+        Message,
+        { clientId: 1, messageId: 1 },
+        {
+          name: 'clientId_messageId_unique',
+          unique: true,
+          background: true,
+          partialFilterExpression: {
+            messageId: { $exists: true, $type: 'string', $ne: '' }
+          }
+        },
+        'messages'
+      );
+    }
     
     // ========================================
     // ÍNDICES PARA CHATS
