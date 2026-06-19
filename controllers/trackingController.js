@@ -1,5 +1,10 @@
 const Campaign = require('../models/Campaign');
 
+function getOpenTrackingMinDelayMs() {
+    const parsedValue = Number.parseInt(process.env.OPEN_TRACKING_MIN_DELAY_MS || '5000', 10);
+    return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 5000;
+}
+
 /**
  * Track email open
  */
@@ -15,6 +20,14 @@ exports.trackEmailOpen = async (req, res) => {
         const recipient = campaign.recipients.id(recipientId);
         if (!recipient) {
             return sendTrackingPixel(res);
+        }
+
+        const minDelayMs = getOpenTrackingMinDelayMs();
+        if (recipient.sentAt && minDelayMs > 0) {
+            const elapsedMs = Date.now() - new Date(recipient.sentAt).getTime();
+            if (elapsedMs >= 0 && elapsedMs < minDelayMs) {
+                return sendTrackingPixel(res);
+            }
         }
 
         // Track the open

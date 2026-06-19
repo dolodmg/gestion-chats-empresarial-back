@@ -79,6 +79,7 @@ app.use('/api/leads', require('./routes/leads'));
 app.use('/api/faqs', require('./routes/faqs'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/email-credentials', require('./routes/emailCredentials'));
+app.use('/api/sending-domains', require('./routes/sendingDomains'));
 app.use('/api/track', require('./routes/tracking')); // Public tracking routes
 
 // ✨ NUEVO: Rutas de Meta Conversions API

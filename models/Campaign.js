@@ -47,6 +47,24 @@ const campaignSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    trackOpens: {
+        type: Boolean,
+        default: true
+    },
+    trackClicks: {
+        type: Boolean,
+        default: true
+    },
+    callToActionUrl: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    callToActionLabel: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     recipients: [recipientSchema],
     status: {
         type: String,

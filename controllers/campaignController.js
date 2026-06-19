@@ -9,7 +9,18 @@ const emailService = new EmailService();
  */
 exports.createCampaign = async (req, res) => {
     try {
-        const { name, subject, htmlContent, textContent, recipients, emailCredentialId } = req.body;
+        const {
+            name,
+            subject,
+            htmlContent,
+            textContent,
+            recipients,
+            emailCredentialId,
+            trackOpens = true,
+            trackClicks = true,
+            callToActionUrl = '',
+            callToActionLabel = ''
+        } = req.body;
 
         // Validar campos requeridos
         if (!name || !subject || !htmlContent || !emailCredentialId) {
@@ -38,6 +49,10 @@ exports.createCampaign = async (req, res) => {
             subject,
             htmlContent,
             textContent: textContent || htmlContent.replace(/<[^>]*>/g, ''), // Extraer texto del HTML
+            trackOpens: trackOpens !== false,
+            trackClicks: trackClicks !== false,
+            callToActionUrl: String(callToActionUrl || '').trim(),
+            callToActionLabel: String(callToActionLabel || '').trim(),
             recipients: recipients || [],
             createdBy: req.user.id,
             emailCredential: emailCredentialId,
@@ -152,7 +167,16 @@ exports.updateCampaign = async (req, res) => {
             });
         }
 
-        const { name, subject, htmlContent, textContent } = req.body;
+        const {
+            name,
+            subject,
+            htmlContent,
+            textContent,
+            trackOpens,
+            trackClicks,
+            callToActionUrl,
+            callToActionLabel
+        } = req.body;
 
         if (name) campaign.name = name;
         if (subject) campaign.subject = subject;
@@ -160,6 +184,10 @@ exports.updateCampaign = async (req, res) => {
             campaign.htmlContent = htmlContent;
             campaign.textContent = textContent || htmlContent.replace(/<[^>]*>/g, '');
         }
+        if (typeof trackOpens === 'boolean') campaign.trackOpens = trackOpens;
+        if (typeof trackClicks === 'boolean') campaign.trackClicks = trackClicks;
+        if (typeof callToActionUrl === 'string') campaign.callToActionUrl = callToActionUrl.trim();
+        if (typeof callToActionLabel === 'string') campaign.callToActionLabel = callToActionLabel.trim();
 
         await campaign.save();
 
@@ -382,7 +410,12 @@ exports.sendCampaign = async (req, res) => {
  */
 async function sendCampaignEmails(campaignId) {
     try {
-        const campaign = await Campaign.findById(campaignId).populate('emailCredential');
+        const campaign = await Campaign.findById(campaignId).populate({
+            path: 'emailCredential',
+            populate: {
+                path: 'sendingDomain'
+            }
+        });
         if (!campaign) return;
 
         if (!campaign.emailCredential) {
@@ -394,6 +427,13 @@ async function sendCampaignEmails(campaignId) {
 
         console.log(`📧 Iniciando envío de campaña: ${campaign.name} (${campaign.recipients.length} destinatarios)`);
         console.log(`📧 Usando credencial: ${campaign.emailCredential.name}`);
+
+        if (campaign.emailCredential.sendingDomain && !campaign.emailCredential.sendingDomain.isReadyForSending) {
+            console.error('❌ El dominio autenticado asociado al SMTP todavía no está listo para envío');
+            campaign.status = 'failed';
+            await campaign.save();
+            return;
+        }
 
         // Note: We need to store the password in a way we can retrieve it
         // For now, we'll use the default transporter if credential password is hashed
@@ -424,10 +464,15 @@ async function sendCampaignEmails(campaignId) {
                     subject: campaign.subject,
                     html: campaign.htmlContent,
                     text: campaign.textContent,
+                    trackOpens: campaign.trackOpens,
+                    trackClicks: campaign.trackClicks,
+                    callToActionUrl: campaign.callToActionUrl,
+                    callToActionLabel: campaign.callToActionLabel,
                     recipientName: recipient.name,
                     transporter: transporter,
                     fromName: campaign.emailCredential.fromName,
                     fromEmail: campaign.emailCredential.fromEmail,
+                    sendingDomain: campaign.emailCredential.sendingDomain || null,
                     campaignId: campaign._id.toString(),
                     recipientId: recipient._id.toString()
                 });

@@ -126,6 +126,7 @@ class EmailService {
         }
       };
 
+
       console.log('📤 Enviando notificación de inactividad...');
 
       // Enviar email con timeout
@@ -539,12 +540,160 @@ Sistema INTELIGENTE v1.0 - Monitoreo Automático de WhatsApp
   /**
    * Enviar email de campaña publicitaria
    */
-  async sendCampaignEmail({ to, subject, html, text, recipientName, transporter, fromName, fromEmail, campaignId, recipientId }) {
+  resolveTrackingBaseUrl(customTrackingDomain) {
+    const customTrackingEnabled = process.env.ENABLE_CUSTOM_TRACKING_DOMAIN === 'true';
+
+    if (customTrackingEnabled && customTrackingDomain) {
+      if (/^https?:\/\//i.test(customTrackingDomain)) {
+        return customTrackingDomain.replace(/\/+$/, '');
+      }
+
+      return `https://${customTrackingDomain.replace(/\/+$/, '')}`;
+    }
+
+    const configuredBaseUrl =
+      process.env.PUBLIC_BASE_URL ||
+      process.env.API_PUBLIC_BASE_URL ||
+      process.env.BACKEND_PUBLIC_URL ||
+      process.env.BACKEND_URL ||
+      process.env.FRONTEND_URL ||
+      process.env.APP_URL ||
+      'http://localhost:5000';
+
+    return configuredBaseUrl
+      .replace(/\/+$/, '')
+      .replace(/\/api$/i, '');
+  }
+
+  buildTrackingUrl(type, campaignId, recipientId, targetUrl, customTrackingDomain) {
+    const trackingBaseUrl = this.resolveTrackingBaseUrl(customTrackingDomain);
+    const trackingUrl = new URL(
+      `/api/track/${type}/${campaignId}/${recipientId}`,
+      `${trackingBaseUrl}/`
+    );
+
+    if (targetUrl) {
+      trackingUrl.searchParams.set('url', targetUrl);
+    }
+
+    return trackingUrl.toString();
+  }
+
+  rewriteHtmlLinksForTracking(html, campaignId, recipientId, customTrackingDomain) {
+    if (!html || !campaignId || !recipientId) {
+      return html;
+    }
+
+    return html.replace(/<a\b([^>]*?)href=(["'])([^"'#]+)\2([^>]*)>/gi, (match, beforeHref, quote, href, afterHref) => {
+      const normalizedHref = href.trim();
+
+      if (
+        !/^https?:\/\//i.test(normalizedHref) ||
+        /^https?:\/\/[^/]+\/api\/track\/click\//i.test(normalizedHref) ||
+        /^(mailto:|tel:|javascript:)/i.test(normalizedHref)
+      ) {
+        return match;
+      }
+
+      const trackedHref = this.buildTrackingUrl('click', campaignId, recipientId, normalizedHref, customTrackingDomain);
+      return `<a${beforeHref}href=${quote}${trackedHref}${quote}${afterHref}>`;
+    });
+  }
+
+  injectTrackingPixel(html, campaignId, recipientId, customTrackingDomain) {
+    if (!html || !campaignId || !recipientId) {
+      return html;
+    }
+
+    const trackingPixelUrl = this.buildTrackingUrl('open', campaignId, recipientId, null, customTrackingDomain);
+    const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
+
+    if (html.includes('</body>')) {
+      return html.replace('</body>', `${trackingPixel}</body>`);
+    }
+
+    return `${html}${trackingPixel}`;
+  }
+
+  appendCallToAction(html, text, url, label) {
+    const normalizedUrl = String(url || '').trim();
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+      return { html, text };
+    }
+
+    const normalizedLabel = String(label || '').trim() || 'Ver más';
+    const callToActionHtml = `
+      <div style="margin-top:24px;">
+        <a href="${normalizedUrl}" style="display:inline-block;padding:12px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">
+          ${normalizedLabel}
+        </a>
+      </div>
+    `;
+    const callToActionText = `\n\n${normalizedLabel}: ${normalizedUrl}`;
+    const hasHtmlPlaceholder = /\{\{cta_(url|label|button)\}\}/i.test(html || '');
+    const hasTextPlaceholder = /\{\{cta_(url|label)\}\}/i.test(text || '');
+
+    const nextHtml = hasHtmlPlaceholder
+      ? String(html || '')
+        .replace(/\{\{cta_url\}\}/gi, normalizedUrl)
+        .replace(/\{\{cta_label\}\}/gi, normalizedLabel)
+        .replace(/\{\{cta_button\}\}/gi, callToActionHtml.trim())
+      : html && html.includes('</body>')
+        ? html.replace('</body>', `${callToActionHtml}</body>`)
+        : `${html || ''}${callToActionHtml}`;
+
+    const nextText = hasTextPlaceholder
+      ? String(text || '')
+        .replace(/\{\{cta_url\}\}/gi, normalizedUrl)
+        .replace(/\{\{cta_label\}\}/gi, normalizedLabel)
+      : `${text || ''}${callToActionText}`.trim();
+
+    return {
+      html: nextHtml,
+      text: nextText
+    };
+  }
+
+  buildBounceAddress(sendingDomain, campaignId, recipientId) {
+    if (process.env.ENABLE_CUSTOM_BOUNCE_DOMAIN !== 'true') {
+      return null;
+    }
+
+    if (!sendingDomain?.bounceSubdomain) {
+      return null;
+    }
+
+    const suffix = [campaignId, recipientId].filter(Boolean).join('.');
+    return suffix ? `bounce+${suffix}@${sendingDomain.bounceSubdomain}` : `bounce@${sendingDomain.bounceSubdomain}`;
+  }
+
+  async sendCampaignEmail({
+    to,
+    subject,
+    html,
+    text,
+    recipientName,
+    transporter,
+    fromName,
+    fromEmail,
+    sendingDomain,
+    campaignId,
+    recipientId,
+    trackOpens = true,
+    trackClicks = true,
+    callToActionUrl = '',
+    callToActionLabel = ''
+  }) {
     try {
       // Use custom transporter if provided
       const emailTransporter = transporter || this.transporter;
       const senderName = fromName || process.env.EMAIL_FROM_NAME || 'Campañas';
       const senderEmail = fromEmail || process.env.EMAIL_USER;
+      const trackingDomain = sendingDomain?.trackingSubdomain || null;
+      const bounceAddress = this.buildBounceAddress(sendingDomain, campaignId, recipientId);
+      const customDkimEnabled = process.env.ENABLE_CUSTOM_DKIM_SIGNING === 'true';
+      const openTrackingEnabled = process.env.ENABLE_OPEN_TRACKING !== 'false' && trackOpens !== false;
+      const clickTrackingEnabled = process.env.ENABLE_CLICK_TRACKING !== 'false' && trackClicks !== false;
 
       const mailOptions = {
         from: {
@@ -560,22 +709,49 @@ Sistema INTELIGENTE v1.0 - Monitoreo Automático de WhatsApp
         }
       };
 
+      if (bounceAddress) {
+        mailOptions.envelope = {
+          from: bounceAddress,
+          to: to
+        };
+      }
+
+      if (sendingDomain && customDkimEnabled) {
+        const decryptedPrivateKey = sendingDomain.getDecryptedPrivateKey?.();
+        if (decryptedPrivateKey) {
+          mailOptions.dkim = {
+            domainName: sendingDomain.domain,
+            keySelector: sendingDomain.dkimSelector,
+            privateKey: decryptedPrivateKey
+          };
+        }
+      }
+
       // Personalizar contenido si hay nombre del destinatario
       if (recipientName) {
         mailOptions.html = mailOptions.html.replace(/\{\{nombre\}\}/gi, recipientName);
         mailOptions.text = mailOptions.text.replace(/\{\{nombre\}\}/gi, recipientName);
       }
 
-      // Inject tracking pixel if campaignId and recipientId are provided
-      if (campaignId && recipientId) {
-        const trackingPixelUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/api/track/open/${campaignId}/${recipientId}`;
-        const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
+      if (callToActionUrl) {
+        const contentWithCallToAction = this.appendCallToAction(
+          mailOptions.html,
+          mailOptions.text,
+          callToActionUrl,
+          callToActionLabel
+        );
 
-        // Inject pixel before closing body tag, or at the end if no body tag
-        if (mailOptions.html.includes('</body>')) {
-          mailOptions.html = mailOptions.html.replace('</body>', `${trackingPixel}</body>`);
-        } else {
-          mailOptions.html += trackingPixel;
+        mailOptions.html = contentWithCallToAction.html;
+        mailOptions.text = contentWithCallToAction.text;
+      }
+
+      if (campaignId && recipientId) {
+        if (clickTrackingEnabled) {
+          mailOptions.html = this.rewriteHtmlLinksForTracking(mailOptions.html, campaignId, recipientId, trackingDomain);
+        }
+
+        if (openTrackingEnabled) {
+          mailOptions.html = this.injectTrackingPixel(mailOptions.html, campaignId, recipientId, trackingDomain);
         }
       }
 

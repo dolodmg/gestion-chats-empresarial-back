@@ -45,6 +45,11 @@ const emailCredentialSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
+    sendingDomain: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'SendingDomain',
+        default: null
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',

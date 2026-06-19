@@ -1,12 +1,25 @@
 const EmailCredential = require('../models/EmailCredential');
 const nodemailer = require('nodemailer');
+const SendingDomain = require('../models/SendingDomain');
+const { domainMatchesEmail } = require('../services/domainAuthService');
+
+async function resolveSendingDomainForUser(sendingDomainId, userId) {
+    if (!sendingDomainId) {
+        return null;
+    }
+
+    return SendingDomain.findOne({
+        _id: sendingDomainId,
+        createdBy: userId
+    });
+}
 
 /**
  * Create new email credential
  */
 exports.createCredential = async (req, res) => {
     try {
-        const { name, host, port, secure, user, password, fromName, fromEmail } = req.body;
+        const { name, host, port, secure, user, password, fromName, fromEmail, sendingDomainId } = req.body;
 
         // Validate required fields
         if (!name || !host || !port || !user || !password || !fromName || !fromEmail) {
@@ -29,6 +42,21 @@ exports.createCredential = async (req, res) => {
             });
         }
 
+        const sendingDomain = await resolveSendingDomainForUser(sendingDomainId, req.user.id);
+        if (!sendingDomain) {
+            return res.status(400).json({
+                success: false,
+                error: 'Debes seleccionar un dominio autenticado válido.'
+            });
+        }
+
+        if (!domainMatchesEmail(fromEmail, sendingDomain.domain)) {
+            return res.status(400).json({
+                success: false,
+                error: `El remitente debe pertenecer al dominio ${sendingDomain.domain}.`
+            });
+        }
+
         const credential = new EmailCredential({
             name,
             host,
@@ -38,6 +66,7 @@ exports.createCredential = async (req, res) => {
             password,
             fromName,
             fromEmail,
+            sendingDomain: sendingDomain._id,
             createdBy: req.user.id
         });
 
@@ -63,7 +92,7 @@ exports.getCredentials = async (req, res) => {
     try {
         const credentials = await EmailCredential.find({
             createdBy: req.user.id
-        }).sort({ createdAt: -1 });
+        }).populate('sendingDomain').sort({ createdAt: -1 });
 
         res.json({
             success: true,
@@ -86,7 +115,7 @@ exports.getCredentialById = async (req, res) => {
         const credential = await EmailCredential.findOne({
             _id: req.params.id,
             createdBy: req.user.id
-        });
+        }).populate('sendingDomain');
 
         if (!credential) {
             return res.status(404).json({
@@ -125,7 +154,28 @@ exports.updateCredential = async (req, res) => {
             });
         }
 
-        const { name, host, port, secure, user, password, fromName, fromEmail, isActive } = req.body;
+        const { name, host, port, secure, user, password, fromName, fromEmail, isActive, sendingDomainId } = req.body;
+
+        const sendingDomain = sendingDomainId
+            ? await resolveSendingDomainForUser(sendingDomainId, req.user.id)
+            : credential.sendingDomain
+                ? await resolveSendingDomainForUser(credential.sendingDomain, req.user.id)
+                : null;
+
+        if (!sendingDomain) {
+            return res.status(400).json({
+                success: false,
+                error: 'Debes asociar la credencial a un dominio autenticado válido.'
+            });
+        }
+
+        const nextFromEmail = fromEmail || credential.fromEmail;
+        if (!domainMatchesEmail(nextFromEmail, sendingDomain.domain)) {
+            return res.status(400).json({
+                success: false,
+                error: `El remitente debe pertenecer al dominio ${sendingDomain.domain}.`
+            });
+        }
 
         if (name) credential.name = name;
         if (host) credential.host = host;
@@ -135,6 +185,7 @@ exports.updateCredential = async (req, res) => {
         if (password) credential.password = password; // Will be encrypted by pre-save hook
         if (fromName) credential.fromName = fromName;
         if (fromEmail) credential.fromEmail = fromEmail;
+        credential.sendingDomain = sendingDomain._id;
         if (typeof isActive !== 'undefined') credential.isActive = isActive;
 
         await credential.save();
@@ -187,7 +238,7 @@ exports.deleteCredential = async (req, res) => {
  */
 exports.testCredential = async (req, res) => {
     try {
-        const { host, port, secure, user, password } = req.body;
+        const { host, port, secure, user, password, fromEmail, sendingDomainId } = req.body;
 
         // If testing existing credential
         if (req.params.id) {
@@ -217,6 +268,23 @@ exports.testCredential = async (req, res) => {
                 success: false,
                 error: 'Host, puerto, usuario y contraseña son requeridos'
             });
+        }
+
+        if (sendingDomainId) {
+            const sendingDomain = await resolveSendingDomainForUser(sendingDomainId, req.user.id);
+            if (!sendingDomain) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Dominio autenticado inválido.'
+                });
+            }
+
+            if (fromEmail && !domainMatchesEmail(fromEmail, sendingDomain.domain)) {
+                return res.status(400).json({
+                    success: false,
+                    error: `El remitente debe pertenecer al dominio ${sendingDomain.domain}.`
+                });
+            }
         }
 
         const transporter = nodemailer.createTransport({
