@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const defaultFeatureFlags = {
   data: true,
   campaigns: true,
+  whatsappCampaigns: true,
   templates: true,
   advisors: true,
   advisorMetrics: true,
@@ -58,6 +59,7 @@ const UserSchema = new mongoose.Schema({
   featureFlags: {
     data: { type: Boolean, default: defaultFeatureFlags.data },
     campaigns: { type: Boolean, default: defaultFeatureFlags.campaigns },
+    whatsappCampaigns: { type: Boolean, default: defaultFeatureFlags.whatsappCampaigns },
     templates: { type: Boolean, default: defaultFeatureFlags.templates },
     advisors: { type: Boolean, default: defaultFeatureFlags.advisors },
     advisorMetrics: { type: Boolean, default: defaultFeatureFlags.advisorMetrics },

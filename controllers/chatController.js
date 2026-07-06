@@ -5,6 +5,17 @@ const ChatState = require('../models/ChatState');
 const sseService = require('../services/sseService');
 const Advisor = require('../models/Advisor');
 
+function hasRealContactName(value, phoneNumber) {
+  const normalizedValue = String(value || '').trim();
+  const normalizedPhone = String(phoneNumber || '').replace(/\D/g, '');
+
+  if (!normalizedValue || normalizedValue === 'Usuario Prueba') {
+    return false;
+  }
+
+  return normalizedValue.replace(/\D/g, '') !== normalizedPhone;
+}
+
 // Obtener todos los chats de un cliente
 // ⚡ OPTIMIZADO - Obtener todos los chats de un cliente con paginación
 exports.getChats = async (req, res) => {
@@ -37,15 +48,20 @@ exports.getChats = async (req, res) => {
           content: { $ne: null }
         }
       },
-      { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
+      {
+        $addFields: {
+          normalizedTimestamp: { $toDate: "$timestamp" }
+        }
+      },
+      { $sort: { chatId: 1, normalizedTimestamp: -1 } },
       {
         $group: {
           _id: "$chatId",
           lastMessage: { $first: "$content" },
-          lastMessageTimestamp: { $first: "$timestamp" },
+          lastMessageTimestamp: { $first: "$normalizedTimestamp" },
           phoneNumber: { $first: "$phoneNumber" },
-          contactName: {
-            $first: {
+          contactNameCandidates: {
+            $push: {
               $cond: [
                 {
                   $and: [
@@ -83,7 +99,23 @@ exports.getChats = async (req, res) => {
           lastMessage: 1,
           lastMessageTimestamp: 1,
           phoneNumber: 1,
-          contactName: { $ifNull: ["$contactName", "$_id"] },
+          contactName: {
+            $ifNull: [
+              {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: "$contactNameCandidates",
+                      as: "candidate",
+                      cond: { $ne: ["$$candidate", null] }
+                    }
+                  },
+                  0
+                ]
+              },
+              "$_id"
+            ]
+          },
           clientId: 1,
           unreadCount: 1
         }
@@ -180,7 +212,7 @@ exports.getChats = async (req, res) => {
     };
 
     const chatStatuses = await Chat.find(chatQuery)
-      .select('chatId chatStatus statusChangeTime tags assignedAdvisorName assignedAdvisorId').lean();
+      .select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked tags assignedAdvisorName assignedAdvisorId').lean();
 
     // Crear un mapa de estados de chat para búsqueda rápida
     const statusMap = {};
@@ -188,18 +220,29 @@ exports.getChats = async (req, res) => {
     const chatsToUpdate = [];
 
     chatStatuses.forEach(chat => {
-      if (chat.chatStatus === 'human' && chat.statusChangeTime && chat.statusChangeTime < thirtyMinutesAgo) {
+      if (
+        chat.chatStatus === 'human' &&
+        chat.statusChangeTime &&
+        !chat.manualControlLocked &&
+        chat.statusChangeTime < thirtyMinutesAgo
+      ) {
         statusMap[chat.chatId] = {
+          phoneNumber: chat.phoneNumber || null,
+          contactName: chat.contactName || null,
           chatStatus: 'bot',
           statusChangeTime: null,
+          manualControlLocked: false,
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
         chatsToUpdate.push(chat.chatId);
       } else {
         statusMap[chat.chatId] = {
+          phoneNumber: chat.phoneNumber || null,
+          contactName: chat.contactName || null,
           chatStatus: chat.chatStatus,
           statusChangeTime: chat.statusChangeTime,
+          manualControlLocked: Boolean(chat.manualControlLocked),
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
@@ -220,8 +263,13 @@ exports.getChats = async (req, res) => {
     // Añadir la información de estado Y TAGS a cada chat
     const enrichedChats = chats.map(chat => ({
       ...chat,
+      phoneNumber: statusMap[chat.chatId]?.phoneNumber || chat.phoneNumber,
+      contactName: hasRealContactName(statusMap[chat.chatId]?.contactName, statusMap[chat.chatId]?.phoneNumber || chat.phoneNumber)
+        ? statusMap[chat.chatId].contactName
+        : chat.contactName,
       chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
       statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
+      manualControlLocked: statusMap[chat.chatId]?.manualControlLocked || false,
       tags: statusMap[chat.chatId]?.tags || [],
       assignedAdvisorName: statusMap[chat.chatId]?.assignedAdvisorName || null
     }));
@@ -257,7 +305,9 @@ exports.getChat = async (req, res) => {
         { content: { $nin: [null, ''] } },
         { mediaUrl: { $ne: null } }
       ]
-    }).sort({ timestamp: 1 });
+    }).lean();
+
+    messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     console.log(`Mensajes encontrados: ${messages.length}`);
 
@@ -265,25 +315,28 @@ exports.getChat = async (req, res) => {
       return res.status(404).json({ msg: 'Chat no encontrado' });
     }
 
-    // Buscar explícitamente un mensaje que tenga contactName
-    let contactName = null;
-    for (const msg of messages) {
-      if (msg.contactName && msg.contactName !== 'Usuario Prueba') {
-        contactName = msg.contactName;
-        break;
+    // Buscar o crear el documento Chat para obtener/establecer el estado
+    let chat = await Chat.findOne({ chatId, clientId });
+
+    let contactName = hasRealContactName(chat?.contactName, chat?.phoneNumber || chatId)
+      ? chat.contactName
+      : null;
+
+    if (!contactName) {
+      for (const msg of messages) {
+        if (hasRealContactName(msg.contactName, msg.phoneNumber || chatId)) {
+          contactName = msg.contactName;
+          break;
+        }
       }
     }
 
-    // Si no encuentra ninguno, usar el número como nombre
     if (!contactName) {
-      contactName = chatId.replace(/^\d+/, ''); // Elimina los números iniciales si hay algún formato
+      contactName = chatId.replace(/^\d+/, '');
       if (!contactName || contactName === '') {
         contactName = chatId;
       }
     }
-
-    // Buscar o crear el documento Chat para obtener/establecer el estado
-    let chat = await Chat.findOne({ chatId, clientId });
 
     if (!chat) {
       // Si no existe el chat, crearlo
@@ -299,6 +352,9 @@ exports.getChat = async (req, res) => {
       });
       await chat.save();
     } else {
+      if (!hasRealContactName(chat.contactName, chat.phoneNumber || chatId) && hasRealContactName(contactName, chat.phoneNumber || chatId)) {
+        chat.contactName = contactName;
+      }
       // Actualizar lastOpenedAt cuando se abre un chat existente
       chat.lastOpenedAt = new Date();
       await chat.save();
@@ -370,7 +426,7 @@ exports.getChat = async (req, res) => {
     }
 
     // Verificar si el temporizador de 30 minutos ha expirado
-    if (chat.chatStatus === 'human' && chat.statusChangeTime) {
+    if (chat.chatStatus === 'human' && chat.statusChangeTime && !chat.manualControlLocked) {
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
       if (chat.statusChangeTime < thirtyMinutesAgo) {
         // Actualizar el estado a 'bot' si pasaron más de 30 minutos
@@ -389,7 +445,8 @@ exports.getChat = async (req, res) => {
       contactName: contactName,
       unreadCount: 0,
       chatStatus: chat.chatStatus,
-      statusChangeTime: chat.statusChangeTime
+      statusChangeTime: chat.statusChangeTime,
+      manualControlLocked: Boolean(chat.manualControlLocked)
     };
 
     // Marcar mensajes como leídos
@@ -483,6 +540,7 @@ exports.changeChatStatus = async (req, res) => {
     console.log(`Cambiando estado para ${chatId} de ${chat.chatStatus || 'undefined'} a ${status}`);
     chat.chatStatus = status;
     chat.statusChangeTime = status === 'human' ? new Date() : null;
+    chat.manualControlLocked = false;
     await chat.save();
 
 
@@ -512,13 +570,15 @@ exports.changeChatStatus = async (req, res) => {
       chatId,
       clientId,
       status,
-      chat.statusChangeTime
+      chat.statusChangeTime,
+      Boolean(chat.manualControlLocked)
     );
 
     res.json({
       chatId,
       chatStatus: chat.chatStatus,
-      statusChangeTime: chat.statusChangeTime
+      statusChangeTime: chat.statusChangeTime,
+      manualControlLocked: Boolean(chat.manualControlLocked)
     });
   } catch (error) {
     console.error('Error changing chat status:', error);
@@ -838,7 +898,7 @@ exports.checkChatStatus = async (req, res) => {
     }
 
     // Verificar si el tiempo de 30 minutos ha expirado
-    if (chat.chatStatus === 'human' && chat.statusChangeTime) {
+    if (chat.chatStatus === 'human' && chat.statusChangeTime && !chat.manualControlLocked) {
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
       if (chat.statusChangeTime < thirtyMinutesAgo) {
         chat.chatStatus = 'bot';
@@ -852,7 +912,8 @@ exports.checkChatStatus = async (req, res) => {
       chatId,
       clientId,
       chatStatus: chat.chatStatus,
-      statusChangeTime: chat.statusChangeTime
+      statusChangeTime: chat.statusChangeTime,
+      manualControlLocked: Boolean(chat.manualControlLocked)
     });
   } catch (error) {
     console.error('Error checking chat status:', error);
@@ -894,15 +955,20 @@ exports.findChatByPhone = async (req, res) => {
           content: { $ne: null }
         }
       },
-      { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
+      {
+        $addFields: {
+          normalizedTimestamp: { $toDate: "$timestamp" }
+        }
+      },
+      { $sort: { chatId: 1, normalizedTimestamp: -1 } },
       {
         $group: {
           _id: "$chatId",
           lastMessage: { $first: "$content" },
-          lastMessageTimestamp: { $first: "$timestamp" },
+          lastMessageTimestamp: { $first: "$normalizedTimestamp" },
           phoneNumber: { $first: "$phoneNumber" },
-          contactName: {
-            $first: {
+          contactNameCandidates: {
+            $push: {
               $cond: [
                 {
                   $and: [
@@ -926,7 +992,23 @@ exports.findChatByPhone = async (req, res) => {
           lastMessage: 1,
           lastMessageTimestamp: 1,
           phoneNumber: 1,
-          contactName: { $ifNull: ["$contactName", "$_id"] },
+          contactName: {
+            $ifNull: [
+              {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: "$contactNameCandidates",
+                      as: "candidate",
+                      cond: { $ne: ["$$candidate", null] }
+                    }
+                  },
+                  0
+                ]
+              },
+              "$_id"
+            ]
+          },
           clientId: 1
         }
       }
@@ -948,16 +1030,22 @@ exports.findChatByPhone = async (req, res) => {
     const chatDoc = await Chat.findOne({
       chatId: matchingChat.chatId,
       clientId
-    }).select('chatId chatStatus statusChangeTime tags').lean();
+    }).select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked tags').lean();
 
     // Verificar timeout de 30 minutos
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
     let chatStatus = 'bot';
     let statusChangeTime = null;
+    let manualControlLocked = false;
     let tags = [];
 
     if (chatDoc) {
-      if (chatDoc.chatStatus === 'human' && chatDoc.statusChangeTime && chatDoc.statusChangeTime < thirtyMinutesAgo) {
+      if (
+        chatDoc.chatStatus === 'human' &&
+        chatDoc.statusChangeTime &&
+        !chatDoc.manualControlLocked &&
+        chatDoc.statusChangeTime < thirtyMinutesAgo
+      ) {
         chatStatus = 'bot';
         statusChangeTime = null;
         // Actualizar en la base de datos
@@ -968,14 +1056,20 @@ exports.findChatByPhone = async (req, res) => {
       } else {
         chatStatus = chatDoc.chatStatus;
         statusChangeTime = chatDoc.statusChangeTime;
+        manualControlLocked = Boolean(chatDoc.manualControlLocked);
       }
       tags = chatDoc.tags || [];
     }
 
     const enrichedChat = {
       ...matchingChat,
+      phoneNumber: chatDoc?.phoneNumber || matchingChat.phoneNumber,
+      contactName: hasRealContactName(chatDoc?.contactName, chatDoc?.phoneNumber || matchingChat.phoneNumber)
+        ? chatDoc.contactName
+        : matchingChat.contactName,
       chatStatus,
       statusChangeTime,
+      manualControlLocked,
       tags,
       unreadCount: 0
     };
@@ -1089,15 +1183,20 @@ exports.searchChats = async (req, res) => {
           content: { $ne: null }
         }
       },
-      { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
+      {
+        $addFields: {
+          normalizedTimestamp: { $toDate: "$timestamp" }
+        }
+      },
+      { $sort: { chatId: 1, normalizedTimestamp: -1 } },
       {
         $group: {
           _id: "$chatId",
           lastMessage: { $first: "$content" },
-          lastMessageTimestamp: { $first: "$timestamp" },
+          lastMessageTimestamp: { $first: "$normalizedTimestamp" },
           phoneNumber: { $first: "$phoneNumber" },
-          contactName: {
-            $first: {
+          contactNameCandidates: {
+            $push: {
               $cond: [
                 {
                   $and: [
@@ -1121,7 +1220,23 @@ exports.searchChats = async (req, res) => {
           lastMessage: 1,
           lastMessageTimestamp: 1,
           phoneNumber: 1,
-          contactName: { $ifNull: ["$contactName", "$_id"] },
+          contactName: {
+            $ifNull: [
+              {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: "$contactNameCandidates",
+                      as: "candidate",
+                      cond: { $ne: ["$$candidate", null] }
+                    }
+                  },
+                  0
+                ]
+              },
+              "$_id"
+            ]
+          },
           clientId: 1
         }
       }
@@ -1228,7 +1343,7 @@ exports.searchChats = async (req, res) => {
     };
 
     const chatStatuses = await Chat.find(chatQuery)
-      .select('chatId chatStatus statusChangeTime tags assignedAdvisorName assignedAdvisorId').lean();
+      .select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked tags assignedAdvisorName assignedAdvisorId').lean();
 
     // Crear un mapa de estados de chat
     const statusMap = {};
@@ -1236,18 +1351,29 @@ exports.searchChats = async (req, res) => {
     const chatsToUpdate = [];
 
     chatStatuses.forEach(chat => {
-      if (chat.chatStatus === 'human' && chat.statusChangeTime && chat.statusChangeTime < thirtyMinutesAgo) {
+      if (
+        chat.chatStatus === 'human' &&
+        chat.statusChangeTime &&
+        !chat.manualControlLocked &&
+        chat.statusChangeTime < thirtyMinutesAgo
+      ) {
         statusMap[chat.chatId] = {
+          phoneNumber: chat.phoneNumber || null,
+          contactName: chat.contactName || null,
           chatStatus: 'bot',
           statusChangeTime: null,
+          manualControlLocked: false,
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
         chatsToUpdate.push(chat.chatId);
       } else {
         statusMap[chat.chatId] = {
+          phoneNumber: chat.phoneNumber || null,
+          contactName: chat.contactName || null,
           chatStatus: chat.chatStatus,
           statusChangeTime: chat.statusChangeTime,
+          manualControlLocked: Boolean(chat.manualControlLocked),
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
@@ -1265,8 +1391,13 @@ exports.searchChats = async (req, res) => {
     // Enriquecer chats con estado y tags
     const enrichedChats = matchingChats.map(chat => ({
       ...chat,
+      phoneNumber: statusMap[chat.chatId]?.phoneNumber || chat.phoneNumber,
+      contactName: hasRealContactName(statusMap[chat.chatId]?.contactName, statusMap[chat.chatId]?.phoneNumber || chat.phoneNumber)
+        ? statusMap[chat.chatId].contactName
+        : chat.contactName,
       chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
       statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
+      manualControlLocked: statusMap[chat.chatId]?.manualControlLocked || false,
       tags: statusMap[chat.chatId]?.tags || [],
       assignedAdvisorName: statusMap[chat.chatId]?.assignedAdvisorName || null,
       unreadCount: 0
@@ -1378,15 +1509,20 @@ exports.adminSearchChatsByPhone = async (req, res) => {
           // content: { $ne: null }
         }
       },
-      { $sort: { chatId: 1, contactName: -1, timestamp: -1 } },
+      {
+        $addFields: {
+          normalizedTimestamp: { $toDate: "$timestamp" }
+        }
+      },
+      { $sort: { chatId: 1, normalizedTimestamp: -1 } },
       {
         $group: {
           _id: { chatId: "$chatId", clientId: "$clientId" },
           lastMessage: { $first: "$content" },
-          lastMessageTimestamp: { $first: "$timestamp" },
+          lastMessageTimestamp: { $first: "$normalizedTimestamp" },
           phoneNumber: { $first: "$phoneNumber" },
-          contactName: {
-            $first: {
+          contactNameCandidates: {
+            $push: {
               $cond: [
                 {
                   $and: [
@@ -1410,7 +1546,23 @@ exports.adminSearchChatsByPhone = async (req, res) => {
           lastMessage: 1,
           lastMessageTimestamp: 1,
           phoneNumber: { $ifNull: ["$phoneNumber", "$_id.chatId"] },
-          contactName: { $ifNull: ["$contactName", "$_id.chatId"] }
+          contactName: {
+            $ifNull: [
+              {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: "$contactNameCandidates",
+                      as: "candidate",
+                      cond: { $ne: ["$$candidate", null] }
+                    }
+                  },
+                  0
+                ]
+              },
+              "$_id.chatId"
+            ]
+          }
         }
       }
     ]);

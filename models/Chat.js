@@ -60,6 +60,10 @@ const ChatSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  manualControlLocked: {
+    type: Boolean,
+    default: false
+  },
   tags: [{
     type: String,
     trim: true,

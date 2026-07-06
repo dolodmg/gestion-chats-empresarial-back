@@ -112,7 +112,7 @@ class SSEService {
    * Notificar cambio de estado de chat
    * (Esta era la función que habías borrado)
    */
-  notifyChatStatusChange(chatId, clientId, chatStatus, statusChangeTime) {
+  notifyChatStatusChange(chatId, clientId, chatStatus, statusChangeTime, manualControlLocked = false) {
     console.log(`🔄 Notificando cambio de estado: ${chatId} -> ${chatStatus}`);
 
     this.clients.forEach((userConnections, userId) => {
@@ -124,6 +124,7 @@ class SSEService {
             clientId,
             chatStatus,
             statusChangeTime,
+            manualControlLocked,
             type: 'status_change'
           });
         }

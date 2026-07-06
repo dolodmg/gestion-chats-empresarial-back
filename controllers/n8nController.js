@@ -267,7 +267,7 @@ exports.checkChatState = async (req, res) => {
     }
     
     // Verificar expiración de 30 minutos si está en modo humano
-    if (finalStatus === 'human' && statusChangeTime) {
+    if (finalStatus === 'human' && statusChangeTime && !chat?.manualControlLocked) {
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
       if (statusChangeTime < thirtyMinutesAgo) {
         console.log(`[N8N] El tiempo de modo "human" ha expirado para ${chatId}, cambiando a "bot"`);
@@ -361,7 +361,7 @@ exports.changeChatState = async (req, res) => {
     
     console.log(`Cambiando estado para chatId: ${chatId} a ${status}`);
     
-    const statusChangeTime = status === 'human' ? new Date() : null;
+      const statusChangeTime = status === 'human' ? new Date() : null;
     
     // Actualizar en AMBAS colecciones para mantener sincronización
     const updatePromises = [];
@@ -388,7 +388,8 @@ exports.changeChatState = async (req, res) => {
         { 
           $set: { 
             chatStatus: status, 
-            statusChangeTime
+            statusChangeTime,
+            manualControlLocked: false
           } 
         },
         { upsert: true, new: true }

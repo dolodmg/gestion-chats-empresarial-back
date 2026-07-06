@@ -5,6 +5,7 @@ const ARGENTINA_UTC_OFFSET = '-03:00';
 const FEATURE_FLAG_KEYS = [
   'data',
   'campaigns',
+  'whatsappCampaigns',
   'templates',
   'advisors',
   'advisorMetrics',
@@ -234,10 +235,22 @@ exports.updateUser = async (req, res) => {
 
     const { name, email, password, role, clientId, workflowId, whatsappToken, wabaId, featureFlags } = req.body;
 
+    console.log('[users.update] request received', {
+      userId: req.params.id,
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      featureFlags
+    });
+
     let user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ msg: 'Usuario no encontrado' });
     }
+
+    console.log('[users.update] current stored featureFlags', {
+      userId: user._id?.toString(),
+      currentFeatureFlags: user.featureFlags
+    });
 
     const userFields = {};
     if (typeof name !== 'undefined') userFields.name = name;
@@ -252,12 +265,19 @@ exports.updateUser = async (req, res) => {
     if (typeof wabaId !== 'undefined') userFields.wabaId = wabaId;
 
     if (featureFlags && typeof featureFlags === 'object') {
-      userFields.featureFlags = {};
+      userFields.featureFlags = {
+        ...(user.featureFlags?.toObject ? user.featureFlags.toObject() : user.featureFlags || {})
+      };
 
       FEATURE_FLAG_KEYS.forEach((key) => {
         if (typeof featureFlags[key] === 'boolean') {
           userFields.featureFlags[key] = featureFlags[key];
         }
+      });
+
+      console.log('[users.update] merged featureFlags to save', {
+        userId: user._id?.toString(),
+        mergedFeatureFlags: userFields.featureFlags
       });
     }
 
@@ -271,6 +291,11 @@ exports.updateUser = async (req, res) => {
       { $set: userFields },
       { new: true }
     ).select('-password');
+
+    console.log('[users.update] persisted user', {
+      userId: user?._id?.toString(),
+      persistedFeatureFlags: user?.featureFlags
+    });
 
     res.json(user);
   } catch (error) {
