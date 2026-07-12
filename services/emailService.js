@@ -796,6 +796,45 @@ Sistema INTELIGENTE v1.0 - Monitoreo Automático de WhatsApp
 
     return results;
   }
+
+  buildDefaultFromAddress(fromName) {
+    return {
+      name: fromName || process.env.EMAIL_FROM_NAME || 'Sistema INTELIGENTE',
+      address: process.env.EMAIL_USER
+    };
+  }
+
+  async sendMail({
+    to,
+    subject,
+    html,
+    text,
+    attachments = [],
+    fromName,
+    replyTo,
+    transporter
+  }) {
+    const emailTransporter = transporter || this.transporter;
+    const mailOptions = {
+      from: this.buildDefaultFromAddress(fromName),
+      to,
+      subject,
+      html,
+      text: text || String(html || '').replace(/<[^>]*>/g, ''),
+      attachments
+    };
+
+    if (replyTo) {
+      mailOptions.replyTo = replyTo;
+    }
+
+    return Promise.race([
+      emailTransporter.sendMail(mailOptions),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout enviando email')), 30000)
+      )
+    ]);
+  }
 }
 
 module.exports = EmailService;

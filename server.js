@@ -74,6 +74,7 @@ app.use('/api/assistant', require('./routes/assistant'));
 
 // Rutas de inscripciones y tablas
 app.use('/api/inscriptions', require('./routes/inscriptions'));
+app.use('/api/certificate-requests', require('./routes/certificateRequests'));
 app.use('/api/custom-tables', require('./routes/customTables'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/faqs', require('./routes/faqs'));

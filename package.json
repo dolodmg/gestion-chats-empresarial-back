@@ -17,13 +17,15 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "form-data": "^4.0.5",
+    "googleapis": "^150.0.1",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
     "moment-timezone": "^0.5.47",
     "mongoose": "^8.20.1",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.5",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
