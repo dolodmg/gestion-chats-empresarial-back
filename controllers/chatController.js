@@ -25,6 +25,7 @@ function hasRealContactName(value, phoneNumber) {
 
   return normalizedValue.replace(/\D/g, '') !== normalizedPhone;
 }
+const { logAction } = require('../services/auditService');
 
 // Obtener todos los chats de un cliente
 // ⚡ OPTIMIZADO - Obtener todos los chats de un cliente con paginación
@@ -602,6 +603,19 @@ exports.changeChatStatus = async (req, res) => {
       chat.manualControlExpiresAt
     );
 
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.status.changed',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        status,
+        statusChangeTime: chat.statusChangeTime,
+        phoneNumber: chat.phoneNumber || null
+      }
+    });
+
     res.json({
       chatId,
       ...getControlResponse(chat)
@@ -736,7 +750,12 @@ exports.sendManualMessage = async (req, res) => {
     const newMessage = new Message({
       chatId,
       clientId,
-      sender: 'bot', // Aunque es manual, para el usuario final viene del "bot"
+      sender: 'bot',
+      direction: 'outbound',
+      source: 'dashboard',
+      provider: 'internal',
+      insertedBy: `${req.user.role}:${req.user.id}`,
+      aiGenerated: false,
       content: content || (mediaType === 'sticker' ? 'Sticker' : (fileName ? `📎 ${fileName}` : '')),
       mediaUrl,
       mediaType,
@@ -744,7 +763,8 @@ exports.sendManualMessage = async (req, res) => {
       mimeType,
       timestamp: new Date(),
       status: 'sent',
-      phoneNumber
+      phoneNumber,
+      messageType: mediaType || 'text'
     });
 
     await newMessage.save();
@@ -807,6 +827,7 @@ exports.sendManualMessage = async (req, res) => {
       // Actualizar el estado del mensaje como failed pero no fallar la respuesta
       await Message.findByIdAndUpdate(newMessage._id, {
         status: 'failed',
+        errorCode: 'WHATSAPP_SEND_FAILED',
         errorMessage: whatsappError.message
       });
     }
@@ -859,6 +880,23 @@ exports.sendManualMessage = async (req, res) => {
       renewedControl.manualControlExpiresAt
     );
 
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.manual_message.sent',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        messageId: newMessage._id.toString(),
+        phoneNumber,
+        hasFile,
+        mediaType,
+        fileName,
+        messageType: newMessage.messageType,
+        status: newMessage.status
+      }
+    });
+
     res.json({
       success: true,
       message: {
@@ -892,7 +930,7 @@ exports.getMedia = async (req, res) => {
     }
 
     // Buscar el mensaje
-    const message = await Message.findById(messageId);
+    const message = await Message.findOne({ _id: messageId, clientId });
     if (!message) {
       return res.status(404).json({ msg: 'Mensaje no encontrado' });
     }
@@ -1194,6 +1232,18 @@ exports.assignChatToAdvisor = async (req, res) => {
       clientId: chat.clientId,
       assignedAdvisorId: chat.assignedAdvisorId,
       assignedAdvisorName: chat.assignedAdvisorName
+    });
+
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.advisor_assignment.updated',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        advisorId: advisorId || null,
+        advisorName
+      }
     });
 
 
@@ -1503,6 +1553,19 @@ exports.deleteMessage = async (req, res) => {
 
     console.log(`🗑️ Mensaje eliminado: ${messageId}`);
 
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.message.deleted',
+      targetType: 'message',
+      targetId: messageId,
+      metadata: {
+        chatId: message.chatId,
+        phoneNumber: message.phoneNumber || null,
+        messageType: message.messageType || null
+      }
+    });
+
     res.json({ success: true, msg: 'Mensaje eliminado' });
   } catch (error) {
     console.error('Error al eliminar mensaje:', error);
@@ -1529,6 +1592,18 @@ exports.deleteChat = async (req, res) => {
     const chatResult = await Chat.deleteOne({ chatId, clientId });
 
     console.log(`🗑️ Chat eliminado: ${chatId} (${messagesResult.deletedCount} mensajes)`);
+
+    void logAction({
+      req,
+      clientId,
+      action: 'chat.deleted',
+      targetType: 'chat',
+      targetId: chatId,
+      metadata: {
+        deletedMessages: messagesResult.deletedCount,
+        deletedChat: chatResult.deletedCount
+      }
+    });
 
     res.json({
       success: true,

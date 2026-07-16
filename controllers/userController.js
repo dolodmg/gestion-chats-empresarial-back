@@ -1,6 +1,8 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Message = require('../models/Message');
+const { serializeUser } = require('../utils/userResponse');
+const { logAction } = require('../services/auditService');
 const ARGENTINA_UTC_OFFSET = '-03:00';
 const FEATURE_FLAG_KEYS = [
   'data',
@@ -81,7 +83,7 @@ exports.getUsers = async (req, res) => {
     if (!ensureAdmin(req, res)) return;
 
     const users = await User.find().select('-password');
-    res.json(users);
+    res.json(users.map(serializeUser));
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ msg: 'Error del servidor' });
@@ -113,6 +115,21 @@ exports.createUser = async (req, res) => {
     });
 
     await user.save();
+
+    void logAction({
+      req,
+      clientId: user.clientId || null,
+      action: 'user.created',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        role: user.role,
+        email: user.email,
+        workflowId: user.workflowId || null,
+        hasWhatsappToken: Boolean(user.whatsappToken),
+        wabaId: user.wabaId || null
+      }
+    });
 
     res.json({
       msg: 'Usuario creado correctamente',
@@ -224,7 +241,7 @@ exports.getUserById = async (req, res) => {
       return res.status(404).json({ msg: 'Usuario no encontrado' });
     }
 
-    res.json(user);
+    res.json(serializeUser(user));
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({ msg: 'Error del servidor' });
@@ -300,7 +317,23 @@ exports.updateUser = async (req, res) => {
       persistedFeatureFlags: user?.featureFlags
     });
 
-    res.json(user);
+    void logAction({
+      req,
+      clientId: user.clientId || null,
+      action: 'user.updated',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        updatedFields: Object.keys(userFields),
+        role: user.role,
+        email: user.email,
+        workflowId: user.workflowId || null,
+        hasWhatsappToken: Boolean(user.whatsappToken),
+        wabaId: user.wabaId || null
+      }
+    });
+
+    res.json(serializeUser(user));
   } catch (error) {
     console.error('Error updating user:', error);
     res.status(500).json({ msg: 'Error del servidor' });
@@ -321,6 +354,18 @@ exports.deleteUser = async (req, res) => {
     }
 
     await User.findByIdAndDelete(req.params.id);
+
+    void logAction({
+      req,
+      clientId: user.clientId || null,
+      action: 'user.deleted',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        role: user.role,
+        email: user.email
+      }
+    });
 
     res.json({ msg: 'Usuario eliminado correctamente' });
   } catch (error) {

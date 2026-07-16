@@ -9,6 +9,9 @@ const {
   normalizeManualControlPreferences,
   isValidWorkdayEndTime
 } = require('../services/manualControlService');
+const { createBrowserToken } = require('../utils/browserToken');
+const { serializeUser } = require('../utils/userResponse');
+const { logAction } = require('../services/auditService');
 
 // Registro de usuario
 router.post('/register', authController.register);
@@ -48,7 +51,7 @@ router.get('/', auth, async (req, res) => {
       return res.status(404).json({ msg: 'Usuario no encontrado' });
     }
 
-    const userResponse = user.toObject();
+    const userResponse = serializeUser(user);
     userResponse.allowPasswordChange = user.allowPasswordChange !== false;
     userResponse.manualControlPreferences = normalizeManualControlPreferences(
       user.manualControlPreferences
@@ -56,6 +59,63 @@ router.get('/', auth, async (req, res) => {
     res.json(userResponse);
   } catch (error) {
     console.error('Error fetching user:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+});
+
+router.get('/browser-token', auth, async (req, res) => {
+  try {
+    if (req.user.role === 'advisor') {
+      const advisor = await Advisor.findById(req.user.id).select('_id clientId');
+      if (!advisor) {
+        return res.status(404).json({ msg: 'Usuario no encontrado' });
+      }
+
+      const browserToken = createBrowserToken({
+        id: advisor.id,
+        role: 'advisor',
+        clientId: advisor.clientId,
+        advisorId: advisor.id
+      });
+
+      void logAction({
+        req,
+        action: 'auth.browser_token.issued',
+        targetType: 'advisor',
+        targetId: advisor.id,
+        clientId: advisor.clientId,
+        metadata: {
+          role: 'advisor'
+        }
+      });
+
+      return res.json({
+        browserToken
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('_id role clientId');
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuario no encontrado' });
+    }
+
+    const browserToken = createBrowserToken(user);
+    void logAction({
+      req,
+      action: 'auth.browser_token.issued',
+      targetType: 'user',
+      targetId: req.user.id,
+      clientId: req.user.clientId || null,
+      metadata: {
+        role: req.user.role
+      }
+    });
+
+    return res.json({
+      browserToken
+    });
+  } catch (error) {
+    console.error('Error creating browser token:', error);
     res.status(500).json({ msg: 'Error del servidor' });
   }
 });
@@ -95,6 +155,18 @@ router.put('/manual-control-preferences', auth, async (req, res) => {
     };
 
     await user.save();
+
+    void logAction({
+      req,
+      clientId: user.clientId,
+      action: 'manual_control.preferences.updated',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        durationSelectionEnabled,
+        workdayEndTime
+      }
+    });
 
     res.json({
       manualControlPreferences: normalizeManualControlPreferences(
@@ -153,6 +225,16 @@ router.post('/change-password', auth, async (req, res) => {
     }
 
     console.log('Contraseña actualizada correctamente para usuario:', user.email);
+    void logAction({
+      req,
+      action: 'auth.password.changed',
+      targetType: 'user',
+      targetId: req.user.id,
+      clientId: req.user.clientId || null,
+      metadata: {
+        email: user.email
+      }
+    });
     res.json({ msg: 'Contraseña actualizada correctamente' });
   } catch (error) {
     console.error('Error cambiando contraseña:', error);

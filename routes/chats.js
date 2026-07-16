@@ -3,6 +3,7 @@ const router = express.Router();
 const chatController = require('../controllers/chatController');
 const chatExportController = require('../controllers/chatExportController');
 const auth = require('../middleware/auth');
+const authenticateBrowserResource = require('../middleware/authenticateBrowserResource');
 const multer = require('multer');
 
 // Configurar multer para uploads en memoria
@@ -33,7 +34,7 @@ router.get('/export/all-ids', auth, chatExportController.getAllChatIds);
 router.post('/export', auth, chatExportController.exportChats);
 
 // Proxy para descargar media de mensajes
-router.get('/media/:messageId', auth, chatController.getMedia);
+router.get('/media/:messageId', authenticateBrowserResource, chatController.getMedia);
 
 // Obtener un chat específico con sus mensajes
 router.get('/:chatId', auth, chatController.getChat);
