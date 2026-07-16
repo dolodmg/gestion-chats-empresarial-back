@@ -6,6 +6,12 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const UserTag = require('../models/UserTags');
 const sseService = require('../services/sseService');
+const ChatState = require('../models/ChatState');
+const {
+    createHumanControlState,
+    applyControlState,
+    getControlResponse
+} = require('../services/manualControlService');
 
 const WHATSAPP_CAMPAIGN_TAG_COLOR = '#2563eb';
 
@@ -181,6 +187,7 @@ async function markCampaignChatForHumanControl(campaign, recipient) {
     });
 
     const now = new Date();
+    const controlState = createHumanControlState('manual', undefined, now);
     const lastMessage = buildCampaignPreview(campaign);
     const contactName = String(recipient.name || '').trim() || phoneNumber;
 
@@ -193,9 +200,7 @@ async function markCampaignChatForHumanControl(campaign, recipient) {
             lastMessage,
             lastMessageTimestamp: now,
             unreadCount: 0,
-            chatStatus: 'human',
-            statusChangeTime: now,
-            manualControlLocked: true,
+            ...controlState,
             tags: [campaignTagName],
             lastOpenedAt: null
         });
@@ -205,16 +210,21 @@ async function markCampaignChatForHumanControl(campaign, recipient) {
         }
         chat.lastMessage = lastMessage;
         chat.lastMessageTimestamp = now;
-        chat.chatStatus = 'human';
-        chat.statusChangeTime = now;
-        chat.manualControlLocked = true;
+        applyControlState(chat, controlState);
 
         if (!chat.tags.includes(campaignTagName)) {
             chat.tags.push(campaignTagName);
         }
     }
 
-    await chat.save();
+    await Promise.all([
+        chat.save(),
+        ChatState.findOneAndUpdate(
+            { chatId: chat.chatId, clientId: chat.clientId },
+            { $set: controlState },
+            { upsert: true, new: true }
+        )
+    ]);
 
     const insertedMessage = await Message.collection.insertOne({
         chatId: chat.chatId,
@@ -235,7 +245,9 @@ async function markCampaignChatForHumanControl(campaign, recipient) {
         chat.clientId,
         chat.chatStatus,
         chat.statusChangeTime,
-        Boolean(chat.manualControlLocked)
+        Boolean(chat.manualControlLocked),
+        chat.manualControlOption,
+        chat.manualControlExpiresAt
     );
 
     sseService.notifyNewMessage({
@@ -256,9 +268,7 @@ async function markCampaignChatForHumanControl(campaign, recipient) {
         contactName: chat.contactName,
         lastMessage: chat.lastMessage,
         lastMessageTimestamp: chat.lastMessageTimestamp,
-        chatStatus: chat.chatStatus,
-        statusChangeTime: chat.statusChangeTime,
-        manualControlLocked: Boolean(chat.manualControlLocked),
+        ...getControlResponse(chat),
         tags: chat.tags
     });
 

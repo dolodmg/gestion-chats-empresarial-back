@@ -4,6 +4,16 @@ const WhatsAppService = require('../services/whatsappService');
 const ChatState = require('../models/ChatState');
 const sseService = require('../services/sseService');
 const Advisor = require('../models/Advisor');
+const {
+  getClientManualControlPreferences,
+  createHumanControlState,
+  createBotControlState,
+  applyControlState,
+  isManualControlExpired,
+  renewManualControl,
+  mergeManualControlState,
+  getControlResponse
+} = require('../services/manualControlService');
 
 function hasRealContactName(value, phoneNumber) {
   const normalizedValue = String(value || '').trim();
@@ -212,26 +222,18 @@ exports.getChats = async (req, res) => {
     };
 
     const chatStatuses = await Chat.find(chatQuery)
-      .select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked tags assignedAdvisorName assignedAdvisorId').lean();
+      .select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked manualControlOption manualControlExpiresAt tags assignedAdvisorName assignedAdvisorId').lean();
 
     // Crear un mapa de estados de chat para búsqueda rápida
     const statusMap = {};
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
     const chatsToUpdate = [];
 
     chatStatuses.forEach(chat => {
-      if (
-        chat.chatStatus === 'human' &&
-        chat.statusChangeTime &&
-        !chat.manualControlLocked &&
-        chat.statusChangeTime < thirtyMinutesAgo
-      ) {
+      if (isManualControlExpired(chat)) {
         statusMap[chat.chatId] = {
           phoneNumber: chat.phoneNumber || null,
           contactName: chat.contactName || null,
-          chatStatus: 'bot',
-          statusChangeTime: null,
-          manualControlLocked: false,
+          ...getControlResponse(createBotControlState()),
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
@@ -240,9 +242,7 @@ exports.getChats = async (req, res) => {
         statusMap[chat.chatId] = {
           phoneNumber: chat.phoneNumber || null,
           contactName: chat.contactName || null,
-          chatStatus: chat.chatStatus,
-          statusChangeTime: chat.statusChangeTime,
-          manualControlLocked: Boolean(chat.manualControlLocked),
+          ...getControlResponse(chat),
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
@@ -251,10 +251,17 @@ exports.getChats = async (req, res) => {
 
 
     if (chatsToUpdate.length > 0) {
-      await Chat.updateMany(
-        { chatId: { $in: chatsToUpdate }, clientId },
-        { $set: { chatStatus: 'bot', statusChangeTime: null } }
-      );
+      const botControlState = createBotControlState();
+      await Promise.all([
+        Chat.updateMany(
+          { chatId: { $in: chatsToUpdate }, clientId },
+          { $set: botControlState }
+        ),
+        ChatState.updateMany(
+          { chatId: { $in: chatsToUpdate }, clientId },
+          { $set: botControlState }
+        )
+      ]);
       console.log(`${chatsToUpdate.length} chats actualizados a modo bot por timeout`);
     }
 
@@ -270,6 +277,8 @@ exports.getChats = async (req, res) => {
       chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
       statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
       manualControlLocked: statusMap[chat.chatId]?.manualControlLocked || false,
+      manualControlOption: statusMap[chat.chatId]?.manualControlOption || null,
+      manualControlExpiresAt: statusMap[chat.chatId]?.manualControlExpiresAt || null,
       tags: statusMap[chat.chatId]?.tags || [],
       assignedAdvisorName: statusMap[chat.chatId]?.assignedAdvisorName || null
     }));
@@ -426,14 +435,16 @@ exports.getChat = async (req, res) => {
     }
 
     // Verificar si el temporizador de 30 minutos ha expirado
-    if (chat.chatStatus === 'human' && chat.statusChangeTime && !chat.manualControlLocked) {
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      if (chat.statusChangeTime < thirtyMinutesAgo) {
-        // Actualizar el estado a 'bot' si pasaron más de 30 minutos
-        chat.chatStatus = 'bot';
-        chat.statusChangeTime = null;
-        await chat.save();
-      }
+    if (isManualControlExpired(chat)) {
+      const botControlState = createBotControlState();
+      applyControlState(chat, botControlState);
+      await Promise.all([
+        chat.save(),
+        ChatState.updateOne(
+          { chatId, clientId },
+          { $set: botControlState }
+        )
+      ]);
     }
 
     const chatInfo = {
@@ -444,9 +455,7 @@ exports.getChat = async (req, res) => {
       phoneNumber: messages[0].phoneNumber || chatId,
       contactName: contactName,
       unreadCount: 0,
-      chatStatus: chat.chatStatus,
-      statusChangeTime: chat.statusChangeTime,
-      manualControlLocked: Boolean(chat.manualControlLocked)
+      ...getControlResponse(chat)
     };
 
     // Marcar mensajes como leídos
@@ -471,7 +480,7 @@ exports.getChat = async (req, res) => {
 exports.changeChatStatus = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { status } = req.body;
+    const { status, manualControlOption = '30m' } = req.body;
     const clientId = req.user.role === 'admin'
       ? req.query.clientId || req.body.clientId  // Aceptar clientId de query o body
       : req.user.clientId;
@@ -504,6 +513,9 @@ exports.changeChatStatus = async (req, res) => {
               clientId,
               chatStatus: chatState.chatStatus,
               statusChangeTime: chatState.statusChangeTime,
+              manualControlLocked: chatState.manualControlLocked,
+              manualControlOption: chatState.manualControlOption,
+              manualControlExpiresAt: chatState.manualControlExpiresAt,
               phoneNumber: chatId,
               contactName: chatId
             });
@@ -536,11 +548,28 @@ exports.changeChatStatus = async (req, res) => {
       }
     }
 
-    // Actualizar el estado en Chat
+    let controlState;
+
+    if (status === 'human') {
+      const preferences = await getClientManualControlPreferences(clientId);
+
+      if (!preferences.durationSelectionEnabled && manualControlOption !== '30m') {
+        return res.status(403).json({
+          msg: 'La seleccion de duracion no esta habilitada para esta cuenta'
+        });
+      }
+
+      try {
+        controlState = createHumanControlState(manualControlOption, preferences);
+      } catch (controlError) {
+        return res.status(400).json({ msg: controlError.message });
+      }
+    } else {
+      controlState = createBotControlState();
+    }
+
     console.log(`Cambiando estado para ${chatId} de ${chat.chatStatus || 'undefined'} a ${status}`);
-    chat.chatStatus = status;
-    chat.statusChangeTime = status === 'human' ? new Date() : null;
-    chat.manualControlLocked = false;
+    applyControlState(chat, controlState);
     await chat.save();
 
 
@@ -550,10 +579,7 @@ exports.changeChatStatus = async (req, res) => {
         // Buscar o crear el registro en ChatState
         chatState = await ChatState.findOneAndUpdate(
           { chatId, clientId },
-          {
-            chatStatus: status,
-            statusChangeTime: status === 'human' ? new Date() : null
-          },
+          { $set: controlState },
           { upsert: true, new: true }
         );
         console.log(`Estado actualizado también en ChatState: ${chatState.chatStatus}`);
@@ -571,14 +597,14 @@ exports.changeChatStatus = async (req, res) => {
       clientId,
       status,
       chat.statusChangeTime,
-      Boolean(chat.manualControlLocked)
+      Boolean(chat.manualControlLocked),
+      chat.manualControlOption,
+      chat.manualControlExpiresAt
     );
 
     res.json({
       chatId,
-      chatStatus: chat.chatStatus,
-      statusChangeTime: chat.statusChangeTime,
-      manualControlLocked: Boolean(chat.manualControlLocked)
+      ...getControlResponse(chat)
     });
   } catch (error) {
     console.error('Error changing chat status:', error);
@@ -630,6 +656,27 @@ exports.sendManualMessage = async (req, res) => {
         console.log(`Asesor ${req.user.advisorId} intentó enviar mensaje en chat no asignado: ${chatId}`);
         return res.status(403).json({ msg: 'No tienes permiso para enviar mensajes en este chat' });
       }
+    }
+
+    const currentControl = mergeManualControlState(chat, chatState);
+    if (isManualControlExpired(currentControl)) {
+      const botControlState = createBotControlState();
+      const releasePromises = [];
+
+      if (chat) {
+        applyControlState(chat, botControlState);
+        releasePromises.push(chat.save());
+      }
+
+      if (chatState) {
+        applyControlState(chatState, botControlState);
+        releasePromises.push(chatState.save());
+      }
+
+      await Promise.all(releasePromises);
+      return res.status(403).json({
+        msg: 'El tiempo de control manual finalizo. Toma el control nuevamente.'
+      });
     }
 
     // Verificar estado del chat
@@ -772,7 +819,25 @@ exports.sendManualMessage = async (req, res) => {
       await chat.save();
       console.log('Información del chat actualizada');
 
-      // 🆕 NUEVO: Notificar actualización del chat
+    }
+
+    const renewalTime = new Date();
+
+    if (chatState) {
+      renewManualControl(chatState, renewalTime);
+      await chatState.save();
+      console.log('Tiempo de control renovado en ChatState');
+    }
+
+    if (chat && chat.chatStatus === 'human') {
+      renewManualControl(chat, renewalTime);
+      await chat.save();
+      console.log('Tiempo de control renovado en Chat');
+    }
+
+    const renewedControl = mergeManualControlState(chat, chatState);
+
+    if (chat) {
       sseService.notifyChatUpdate({
         chatId: chat.chatId,
         clientId: chat.clientId,
@@ -780,23 +845,19 @@ exports.sendManualMessage = async (req, res) => {
         lastMessageTimestamp: chat.lastMessageTimestamp,
         phoneNumber: chat.phoneNumber,
         contactName: chat.contactName,
-        chatStatus: chat.chatStatus,
-        statusChangeTime: chat.statusChangeTime
+        ...getControlResponse(renewedControl)
       });
     }
 
-    // Actualizar el tiempo de control manual en ChatState o Chat
-    if (chatState) {
-      chatState.statusChangeTime = new Date(); // Renovar el tiempo de 30 minutos
-      await chatState.save();
-      console.log('Tiempo de control renovado en ChatState');
-    }
-
-    if (chat && chat.chatStatus === 'human') {
-      chat.statusChangeTime = new Date(); // Renovar el tiempo también en Chat
-      await chat.save();
-      console.log('Tiempo de control renovado en Chat');
-    }
+    sseService.notifyChatStatusChange(
+      chatId,
+      clientId,
+      renewedControl.chatStatus,
+      renewedControl.statusChangeTime,
+      Boolean(renewedControl.manualControlLocked),
+      renewedControl.manualControlOption,
+      renewedControl.manualControlExpiresAt
+    );
 
     res.json({
       success: true,
@@ -897,23 +958,23 @@ exports.checkChatStatus = async (req, res) => {
       await chat.save();
     }
 
-    // Verificar si el tiempo de 30 minutos ha expirado
-    if (chat.chatStatus === 'human' && chat.statusChangeTime && !chat.manualControlLocked) {
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      if (chat.statusChangeTime < thirtyMinutesAgo) {
-        chat.chatStatus = 'bot';
-        chat.statusChangeTime = null;
-        await chat.save();
-      }
+    if (isManualControlExpired(chat)) {
+      const botControlState = createBotControlState();
+      applyControlState(chat, botControlState);
+      await Promise.all([
+        chat.save(),
+        ChatState.updateOne(
+          { chatId, clientId },
+          { $set: botControlState }
+        )
+      ]);
     }
 
     // Devolver el estado
     res.json({
       chatId,
       clientId,
-      chatStatus: chat.chatStatus,
-      statusChangeTime: chat.statusChangeTime,
-      manualControlLocked: Boolean(chat.manualControlLocked)
+      ...getControlResponse(chat)
     });
   } catch (error) {
     console.error('Error checking chat status:', error);
@@ -1030,33 +1091,35 @@ exports.findChatByPhone = async (req, res) => {
     const chatDoc = await Chat.findOne({
       chatId: matchingChat.chatId,
       clientId
-    }).select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked tags').lean();
+    }).select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked manualControlOption manualControlExpiresAt tags').lean();
 
-    // Verificar timeout de 30 minutos
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
     let chatStatus = 'bot';
     let statusChangeTime = null;
     let manualControlLocked = false;
+    let manualControlOption = null;
+    let manualControlExpiresAt = null;
     let tags = [];
 
     if (chatDoc) {
-      if (
-        chatDoc.chatStatus === 'human' &&
-        chatDoc.statusChangeTime &&
-        !chatDoc.manualControlLocked &&
-        chatDoc.statusChangeTime < thirtyMinutesAgo
-      ) {
-        chatStatus = 'bot';
-        statusChangeTime = null;
-        // Actualizar en la base de datos
-        await Chat.updateOne(
-          { chatId: matchingChat.chatId, clientId },
-          { $set: { chatStatus: 'bot', statusChangeTime: null } }
-        );
+      if (isManualControlExpired(chatDoc)) {
+        const botControlState = createBotControlState();
+        await Promise.all([
+          Chat.updateOne(
+            { chatId: matchingChat.chatId, clientId },
+            { $set: botControlState }
+          ),
+          ChatState.updateOne(
+            { chatId: matchingChat.chatId, clientId },
+            { $set: botControlState }
+          )
+        ]);
       } else {
-        chatStatus = chatDoc.chatStatus;
-        statusChangeTime = chatDoc.statusChangeTime;
-        manualControlLocked = Boolean(chatDoc.manualControlLocked);
+        const controlResponse = getControlResponse(chatDoc);
+        chatStatus = controlResponse.chatStatus;
+        statusChangeTime = controlResponse.statusChangeTime;
+        manualControlLocked = controlResponse.manualControlLocked;
+        manualControlOption = controlResponse.manualControlOption;
+        manualControlExpiresAt = controlResponse.manualControlExpiresAt;
       }
       tags = chatDoc.tags || [];
     }
@@ -1070,6 +1133,8 @@ exports.findChatByPhone = async (req, res) => {
       chatStatus,
       statusChangeTime,
       manualControlLocked,
+      manualControlOption,
+      manualControlExpiresAt,
       tags,
       unreadCount: 0
     };
@@ -1343,26 +1408,18 @@ exports.searchChats = async (req, res) => {
     };
 
     const chatStatuses = await Chat.find(chatQuery)
-      .select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked tags assignedAdvisorName assignedAdvisorId').lean();
+      .select('chatId phoneNumber contactName chatStatus statusChangeTime manualControlLocked manualControlOption manualControlExpiresAt tags assignedAdvisorName assignedAdvisorId').lean();
 
     // Crear un mapa de estados de chat
     const statusMap = {};
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
     const chatsToUpdate = [];
 
     chatStatuses.forEach(chat => {
-      if (
-        chat.chatStatus === 'human' &&
-        chat.statusChangeTime &&
-        !chat.manualControlLocked &&
-        chat.statusChangeTime < thirtyMinutesAgo
-      ) {
+      if (isManualControlExpired(chat)) {
         statusMap[chat.chatId] = {
           phoneNumber: chat.phoneNumber || null,
           contactName: chat.contactName || null,
-          chatStatus: 'bot',
-          statusChangeTime: null,
-          manualControlLocked: false,
+          ...getControlResponse(createBotControlState()),
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
@@ -1371,9 +1428,7 @@ exports.searchChats = async (req, res) => {
         statusMap[chat.chatId] = {
           phoneNumber: chat.phoneNumber || null,
           contactName: chat.contactName || null,
-          chatStatus: chat.chatStatus,
-          statusChangeTime: chat.statusChangeTime,
-          manualControlLocked: Boolean(chat.manualControlLocked),
+          ...getControlResponse(chat),
           tags: chat.tags || [],
           assignedAdvisorName: chat.assignedAdvisorName || null
         };
@@ -1382,10 +1437,17 @@ exports.searchChats = async (req, res) => {
 
     // Actualizar chats expirados
     if (chatsToUpdate.length > 0) {
-      await Chat.updateMany(
-        { chatId: { $in: chatsToUpdate }, clientId },
-        { $set: { chatStatus: 'bot', statusChangeTime: null } }
-      );
+      const botControlState = createBotControlState();
+      await Promise.all([
+        Chat.updateMany(
+          { chatId: { $in: chatsToUpdate }, clientId },
+          { $set: botControlState }
+        ),
+        ChatState.updateMany(
+          { chatId: { $in: chatsToUpdate }, clientId },
+          { $set: botControlState }
+        )
+      ]);
     }
 
     // Enriquecer chats con estado y tags
@@ -1398,6 +1460,8 @@ exports.searchChats = async (req, res) => {
       chatStatus: statusMap[chat.chatId]?.chatStatus || 'bot',
       statusChangeTime: statusMap[chat.chatId]?.statusChangeTime || null,
       manualControlLocked: statusMap[chat.chatId]?.manualControlLocked || false,
+      manualControlOption: statusMap[chat.chatId]?.manualControlOption || null,
+      manualControlExpiresAt: statusMap[chat.chatId]?.manualControlExpiresAt || null,
       tags: statusMap[chat.chatId]?.tags || [],
       assignedAdvisorName: statusMap[chat.chatId]?.assignedAdvisorName || null,
       unreadCount: 0

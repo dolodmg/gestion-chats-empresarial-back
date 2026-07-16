@@ -5,6 +5,10 @@ const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Advisor = require('../models/Advisor');
 const bcrypt = require('bcryptjs');
+const {
+  normalizeManualControlPreferences,
+  isValidWorkdayEndTime
+} = require('../services/manualControlService');
 
 // Registro de usuario
 router.post('/register', authController.register);
@@ -21,7 +25,8 @@ router.get('/', auth, async (req, res) => {
         return res.status(404).json({ msg: 'Usuario no encontrado' });
       }
 
-      const clientUser = await User.findOne({ clientId: advisor.clientId, role: 'client' }).select('featureFlags');
+      const clientUser = await User.findOne({ clientId: advisor.clientId, role: 'client' })
+        .select('featureFlags manualControlPreferences');
 
       return res.json({
         _id: advisor._id,
@@ -31,12 +36,24 @@ router.get('/', auth, async (req, res) => {
         role: 'advisor',
         clientId: advisor.clientId,
         advisorId: advisor.id,
-        featureFlags: clientUser?.featureFlags
+        featureFlags: clientUser?.featureFlags,
+        manualControlPreferences: normalizeManualControlPreferences(
+          clientUser?.manualControlPreferences
+        )
       });
     }
 
     const user = await User.findById(req.user.id).select('-password');
-    res.json(user);
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuario no encontrado' });
+    }
+
+    const userResponse = user.toObject();
+    userResponse.allowPasswordChange = user.allowPasswordChange !== false;
+    userResponse.manualControlPreferences = normalizeManualControlPreferences(
+      user.manualControlPreferences
+    );
+    res.json(userResponse);
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({ msg: 'Error del servidor' });
@@ -44,6 +61,52 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Cambiar contraseña de usuario
+router.put('/manual-control-preferences', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'client') {
+      return res.status(403).json({
+        msg: 'Solo la cuenta principal puede modificar esta configuracion'
+      });
+    }
+
+    const { durationSelectionEnabled, workdayEndTime } = req.body;
+
+    if (typeof durationSelectionEnabled !== 'boolean') {
+      return res.status(400).json({ msg: 'La habilitacion debe ser booleana' });
+    }
+
+    if (!isValidWorkdayEndTime(workdayEndTime)) {
+      return res.status(400).json({ msg: 'La hora debe tener formato HH:mm' });
+    }
+
+    const user = await User.findOne({
+      _id: req.user.id,
+      role: 'client'
+    });
+
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuario no encontrado' });
+    }
+
+    user.manualControlPreferences = {
+      durationSelectionEnabled,
+      workdayEndTime,
+      timeZone: 'America/Argentina/Buenos_Aires'
+    };
+
+    await user.save();
+
+    res.json({
+      manualControlPreferences: normalizeManualControlPreferences(
+        user.manualControlPreferences
+      )
+    });
+  } catch (error) {
+    console.error('Error updating manual control preferences:', error);
+    res.status(500).json({ msg: 'Error del servidor' });
+  }
+});
+
 router.post('/change-password', auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -59,6 +122,10 @@ router.post('/change-password', auth, async (req, res) => {
     if (!user) {
       console.log('Usuario no encontrado:', req.user.id);
       return res.status(404).json({ msg: 'Usuario no encontrado' });
+    }
+
+    if (user.allowPasswordChange === false) {
+      return res.status(403).json({ msg: 'El cambio de contraseña está deshabilitado para este usuario' });
     }
 
     // Verificar la contraseña actual

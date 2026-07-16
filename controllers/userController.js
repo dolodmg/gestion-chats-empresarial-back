@@ -92,7 +92,7 @@ exports.createUser = async (req, res) => {
   try {
     if (!ensureAdmin(req, res)) return;
 
-    const { name, email, password, role, clientId, workflowId, whatsappToken, wabaId, featureFlags } = req.body;
+    const { name, email, password, role, clientId, workflowId, whatsappToken, wabaId, featureFlags, allowPasswordChange } = req.body;
 
     let user = await User.findOne({ email });
     if (user) {
@@ -108,7 +108,8 @@ exports.createUser = async (req, res) => {
       workflowId: role === 'client' && workflowId ? workflowId : undefined,
       whatsappToken: role === 'client' && whatsappToken ? whatsappToken : undefined,
       wabaId: role === 'client' && wabaId ? wabaId : undefined,
-      featureFlags: role === 'client' && featureFlags ? featureFlags : undefined
+      featureFlags: role === 'client' && featureFlags ? featureFlags : undefined,
+      allowPasswordChange: typeof allowPasswordChange === 'boolean' ? allowPasswordChange : true
     });
 
     await user.save();
@@ -123,7 +124,8 @@ exports.createUser = async (req, res) => {
         clientId: user.clientId,
         workflowId: user.workflowId,
         hasWhatsappToken: !!user.whatsappToken,
-        featureFlags: user.featureFlags
+        featureFlags: user.featureFlags,
+        allowPasswordChange: user.allowPasswordChange !== false
       }
     });
   } catch (error) {
@@ -233,7 +235,7 @@ exports.updateUser = async (req, res) => {
   try {
     if (!ensureAdmin(req, res)) return;
 
-    const { name, email, password, role, clientId, workflowId, whatsappToken, wabaId, featureFlags } = req.body;
+    const { name, email, password, role, clientId, workflowId, whatsappToken, wabaId, featureFlags, allowPasswordChange } = req.body;
 
     console.log('[users.update] request received', {
       userId: req.params.id,
@@ -263,6 +265,7 @@ exports.updateUser = async (req, res) => {
     if (targetRole === 'client' && typeof workflowId !== 'undefined') userFields.workflowId = workflowId;
     if (typeof whatsappToken !== 'undefined') userFields.whatsappToken = whatsappToken;
     if (typeof wabaId !== 'undefined') userFields.wabaId = wabaId;
+    if (typeof allowPasswordChange === 'boolean') userFields.allowPasswordChange = allowPasswordChange;
 
     if (featureFlags && typeof featureFlags === 'object') {
       userFields.featureFlags = {

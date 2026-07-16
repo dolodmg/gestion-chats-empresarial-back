@@ -69,6 +69,24 @@ const UserSchema = new mongoose.Schema({
     conversationSummary: { type: Boolean, default: defaultFeatureFlags.conversationSummary },
     sendTemplates: { type: Boolean, default: defaultFeatureFlags.sendTemplates },
   },
+  allowPasswordChange: {
+    type: Boolean,
+    default: true,
+  },
+  manualControlPreferences: {
+    durationSelectionEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    workdayEndTime: {
+      type: String,
+      default: '18:00',
+    },
+    timeZone: {
+      type: String,
+      default: 'America/Argentina/Buenos_Aires',
+    },
+  },
   createdAt: {
     type: Date,
     default: Date.now,

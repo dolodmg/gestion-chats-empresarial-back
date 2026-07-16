@@ -3,6 +3,12 @@ const WhatsAppService = require('../services/whatsappService');
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const ChatState = require('../models/ChatState');
+const {
+    createHumanControlState,
+    applyControlState,
+    getControlResponse
+} = require('../services/manualControlService');
 
 /**
  * Crear una nueva plantilla
@@ -385,11 +391,18 @@ exports.sendTemplateToChat = async (req, res) => {
         console.log(`📝 Cambiando chat ${chatId} a modo HUMAN...`);
         console.log(`Estado anterior: ${chat.chatStatus}`);
 
-        chat.chatStatus = 'human';
-        chat.statusChangeTime = new Date();
+        const controlState = createHumanControlState('30m');
+        applyControlState(chat, controlState);
         chat.lastMessage = messageContent;
         chat.lastMessageTimestamp = new Date();
-        await chat.save();
+        await Promise.all([
+            chat.save(),
+            ChatState.findOneAndUpdate(
+                { chatId, clientId },
+                { $set: controlState },
+                { upsert: true, new: true }
+            )
+        ]);
 
         console.log(`✅ Chat ${chatId} cambiado a modo HUMAN exitosamente`);
         console.log(`Estado actual: ${chat.chatStatus}`);
@@ -399,7 +412,7 @@ exports.sendTemplateToChat = async (req, res) => {
             msg: 'Plantilla enviada exitosamente',
             whatsappResponse,
             message: newMessage,
-            chatStatus: 'human'
+            ...getControlResponse(chat)
         });
     } catch (error) {
         console.error('❌ ===== ERROR EN ENVÍO DE PLANTILLA =====');

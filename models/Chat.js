@@ -64,6 +64,15 @@ const ChatSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  manualControlOption: {
+    type: String,
+    enum: ['30m', '2h', '8h', 'workday', 'manual'],
+    default: null
+  },
+  manualControlExpiresAt: {
+    type: Date,
+    default: null
+  },
   tags: [{
     type: String,
     trim: true,

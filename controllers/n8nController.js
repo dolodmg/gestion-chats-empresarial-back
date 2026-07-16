@@ -4,6 +4,14 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const UserTag = require('../models/UserTags');
 const sseService = require('../services/sseService');
+const {
+  createHumanControlState,
+  createBotControlState,
+  applyControlState,
+  isManualControlExpired,
+  mergeManualControlState,
+  getControlResponse
+} = require('../services/manualControlService');
 
 const ATTENTION_TAG_NAME = 'se requiere atencion';
 const ATTENTION_TAG_COLOR = '#ff0000';
@@ -249,35 +257,21 @@ exports.checkChatState = async (req, res) => {
     const stateFromChat = chat && chat.chatStatus === 'human';
     
     // Determinar el estado final
-    const isHuman = stateFromChatState || stateFromChat;
-    const finalStatus = isHuman ? 'human' : 'bot';
+    const combinedControl = mergeManualControlState(chat, chatState);
+    const controlResponse = getControlResponse(combinedControl);
+    const finalStatus = controlResponse.chatStatus;
+    const statusChangeTime = controlResponse.statusChangeTime;
     
-    // Obtener el tiempo de cambio más reciente
-    let statusChangeTime = null;
-    if (isHuman) {
-      // Usar el tiempo más reciente entre ambas colecciones
-      const chatStateTime = chatState?.statusChangeTime;
-      const chatTime = chat?.statusChangeTime;
-      
-      if (chatStateTime && chatTime) {
-        statusChangeTime = chatStateTime > chatTime ? chatStateTime : chatTime;
-      } else {
-        statusChangeTime = chatStateTime || chatTime;
-      }
-    }
-    
-    // Verificar expiración de 30 minutos si está en modo humano
-    if (finalStatus === 'human' && statusChangeTime && !chat?.manualControlLocked) {
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      if (statusChangeTime < thirtyMinutesAgo) {
+    // Verificar la fecha de vencimiento del control humano
+    if (isManualControlExpired(combinedControl)) {
         console.log(`[N8N] El tiempo de modo "human" ha expirado para ${chatId}, cambiando a "bot"`);
         
         // Actualizar en ambas colecciones
         const updatePromises = [];
+        const botControlState = createBotControlState();
         
         if (chat) {
-          chat.chatStatus = 'bot';
-          chat.statusChangeTime = null;
+          applyControlState(chat, botControlState);
           updatePromises.push(chat.save());
         }
         
@@ -285,7 +279,7 @@ exports.checkChatState = async (req, res) => {
           updatePromises.push(
             ChatState.updateOne(
               { chatId, clientId },
-              { $set: { chatStatus: 'bot', statusChangeTime: null } }
+              { $set: botControlState }
             )
           );
         }
@@ -299,11 +293,9 @@ exports.checkChatState = async (req, res) => {
           reason: 'timeout',
           debug: {
             originalStatus: 'human',
-            expiredAt: statusChangeTime,
-            thirtyMinutesAgo: thirtyMinutesAgo
+            expiredAt: controlResponse.manualControlExpiresAt
           }
         });
-      }
     }
     
     console.log(`[N8N] Estado final para ${chatId}: ${finalStatus}`);
@@ -314,6 +306,9 @@ exports.checkChatState = async (req, res) => {
       success: true, 
       chatStatus: finalStatus,
       statusChangeTime: statusChangeTime,
+      manualControlOption: controlResponse.manualControlOption,
+      manualControlExpiresAt: controlResponse.manualControlExpiresAt,
+      manualControlLocked: controlResponse.manualControlLocked,
       debug: {
         stateFromChatState: stateFromChatState,
         stateFromChat: stateFromChat,
@@ -361,7 +356,9 @@ exports.changeChatState = async (req, res) => {
     
     console.log(`Cambiando estado para chatId: ${chatId} a ${status}`);
     
-      const statusChangeTime = status === 'human' ? new Date() : null;
+    const controlState = status === 'human'
+      ? createHumanControlState('30m')
+      : createBotControlState();
     
     // Actualizar en AMBAS colecciones para mantener sincronización
     const updatePromises = [];
@@ -371,9 +368,8 @@ exports.changeChatState = async (req, res) => {
       ChatState.findOneAndUpdate(
         { chatId, clientId },
         { 
-          $set: { 
-            chatStatus: status, 
-            statusChangeTime,
+          $set: {
+            ...controlState,
             updatedAt: new Date()
           } 
         },
@@ -386,11 +382,7 @@ exports.changeChatState = async (req, res) => {
       Chat.findOneAndUpdate(
         { chatId, clientId },
         { 
-          $set: { 
-            chatStatus: status, 
-            statusChangeTime,
-            manualControlLocked: false
-          } 
+          $set: controlState
         },
         { upsert: true, new: true }
       )
@@ -404,8 +396,7 @@ exports.changeChatState = async (req, res) => {
       success: true,
       chatId,
       clientId,
-      chatStatus: chatState.chatStatus,
-      statusChangeTime: chatState.statusChangeTime
+      ...getControlResponse(chatState)
     });
     
   } catch (error) {

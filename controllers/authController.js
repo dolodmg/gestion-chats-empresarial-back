@@ -2,14 +2,24 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Advisor = require('../models/Advisor');
+const {
+  normalizeManualControlPreferences
+} = require('../services/manualControlService');
 
-async function getClientFeatureFlags(clientId) {
+async function getClientConfiguration(clientId) {
   if (!clientId) {
-    return undefined;
+    return {};
   }
 
-  const clientUser = await User.findOne({ clientId, role: 'client' }).select('featureFlags');
-  return clientUser?.featureFlags;
+  const clientUser = await User.findOne({ clientId, role: 'client' })
+    .select('featureFlags manualControlPreferences');
+
+  return {
+    featureFlags: clientUser?.featureFlags,
+    manualControlPreferences: normalizeManualControlPreferences(
+      clientUser?.manualControlPreferences
+    )
+  };
 }
 
 // Registro de usuario
@@ -94,7 +104,7 @@ exports.login = async (req, res) => {
     let payload, userResponse;
 
     if (isAdvisor) {
-      const featureFlags = await getClientFeatureFlags(advisor.clientId);
+      const clientConfiguration = await getClientConfiguration(advisor.clientId);
 
       payload = {
         user: {
@@ -112,7 +122,8 @@ exports.login = async (req, res) => {
         role: 'advisor',
         clientId: advisor.clientId,
         advisorId: advisor.id,
-        featureFlags
+        featureFlags: clientConfiguration.featureFlags,
+        manualControlPreferences: clientConfiguration.manualControlPreferences
       };
     } else {
       payload = {
@@ -130,6 +141,10 @@ exports.login = async (req, res) => {
         role: user.role,
         clientId: user.clientId,
         featureFlags: user.featureFlags,
+        allowPasswordChange: user.allowPasswordChange !== false,
+        manualControlPreferences: normalizeManualControlPreferences(
+          user.manualControlPreferences
+        ),
       };
     }
 

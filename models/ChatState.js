@@ -20,6 +20,19 @@ const ChatStateSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  manualControlLocked: {
+    type: Boolean,
+    default: false
+  },
+  manualControlOption: {
+    type: String,
+    enum: ['30m', '2h', '8h', 'workday', 'manual'],
+    default: null
+  },
+  manualControlExpiresAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now,
